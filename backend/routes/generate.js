@@ -2,7 +2,7 @@ import express from 'express';
 import { generateL2Config, generateL3Config } from '../services/configGenerator.js';
 import { generateSiteEngineCsv } from '../services/csvGenerator.js';
 import { generateXIQSEConfigs } from '../services/xiqseConfigGenerator.js';
-import { generateMgmtCsv } from '../services/mgmtCsvGenerator.js';
+import { generateMgmtCsv } from '../services/Mgmtcsvgenerator.js';
 import { sanitizeFileName } from '../middleware/validation.js';
 
 const router = express.Router();
