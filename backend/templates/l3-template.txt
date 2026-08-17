@@ -1,0 +1,203 @@
+
+enable
+configure terminal
+
+prompt SITE-MDF-01
+
+! Configure VLANs and I-SIDs
+vlan create 8 name Netmgmt type port-mstprstp 0
+vlan create 16 name VoIP type port-mstprstp 0
+vlan create 24 name Security type port-mstprstp 0
+vlan create 32 name StaffWired type port-mstprstp 0
+vlan create 40 name StaffWlan type port-mstprstp 0
+vlan create 56 name StudentWired type port-mstprstp 0
+vlan create 64 name StudentWlan type port-mstprstp 0
+vlan create 72 name GuestWlan type port-mstprstp 0
+vlan create 80 name Hvac type port-mstprstp 0
+vlan create 88 name IoT type port-mstprstp 0
+vlan create 1000 name Wan type port-mstprstp 0
+
+vlan i-sid 1 12280001
+vlan i-sid 8 12280008 
+vlan i-sid 16 12280016 
+vlan i-sid 24 12280024 
+vlan i-sid 32 12280032 
+vlan i-sid 40 12280040 
+vlan i-sid 56 12280056 
+vlan i-sid 64 12280064 
+vlan i-sid 72 12280072 
+vlan i-sid 80 12280080 
+vlan i-sid 88 12280088
+
+i-sid name 12280001 LHES-Default
+i-sid name 12280008 LHES-Netmgmt
+i-sid name 12280016 LHES-VOIP
+i-sid name 12280024 LHES-Security
+i-sid name 12280032 LHES-StaffWired
+i-sid name 12280040 LHES-StaffWLAN
+i-sid name 12280056 LHES-StudentWired
+i-sid name 12280064 LHES-StudentWLAN
+i-sid name 12280072 LHES-GuestWLAN
+i-sid name 12280080 LHES-HVAC
+i-sid name 12280088 LHES-IoT
+
+auto-sense data i-sid 12280032
+auto-sense voice i-sid 12280016 c-vid 32
+auto-sense fa cam i-sid 12280024
+auto-sense fa wap i-sid 12280008
+
+no mgmt vlan
+mgmt clip
+ip add 28.10.10.1/32
+enable
+exit
+
+ip route 0.0.0.0 0.0.0.0 10.101.1.1 weight 1
+
+save config
+
+
+
+! Configure Layer 3 interfaces
+
+interface vlan 1
+ip address 10.28.2.254 255.255.0.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 8
+ip address 10.128.8.1 255.255.255.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 16
+ip address 10.128.16.1 255.255.255.0
+ip spb-multicast enable
+ip igmp upnp-filter 
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 24
+ip address 10.128.24.1 255.255.255.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 32
+ip address 10.128.32.1 255.255.254.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 40
+ip address 10.128.40.1 255.255.252.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 56
+ip address 10.128.56.1 255.255.255.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 64
+ip address 10.128.64.1 255.255.248.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 72
+ip address 10.128.72.1 255.255.255.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 80
+ip address 10.128.80.1 255.255.255.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 88
+ip address 10.128.88.1 255.255.255.0
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path 10.1.1.202 enable
+ip dhcp-relay fwd-path 10.1.1.207 enable
+exit
+
+interface vlan 1000
+ip address 10.101.1.11 255.255.255.0
+exit
+
+int gig 1/25
+encapsulation dot1q
+vlan mem add 1000 1/25
+
+
+slpp enable
+slpp vid 1
+slpp vid 8
+slpp vid 16
+slpp vid 24
+slpp vid 32
+slpp vid 40
+slpp vid 56
+slpp vid 64
+slpp vid 72
+slpp vid 80
+slpp vid 88
+
+exit
+
+ip ecmp
+
+isis apply redistribute static
+isis apply redistribute direct
+
+save config
+

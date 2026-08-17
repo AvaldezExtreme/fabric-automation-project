@@ -1,0 +1,59 @@
+! ============================================
+! Switch: WA-MDF-1
+! SiteID: 16
+! Layer 2 Access Switch
+! Generated: 2026-08-17T16:37:49.392Z
+! ============================================
+
+enable
+configure terminal
+
+prompt WA-MDF-1
+banner custom
+banner displaymotd
+banner motd "WALKER"
+
+! Create VLANs
+vlan create 1 name Default type port-mstprstp 0
+vlan create 16 name NetworkMGMT type port-mstprstp 0
+vlan create 20 name StaffPrison type port-mstprstp 0
+vlan create 25 name VoIP type port-mstprstp 0
+vlan create 30 name Optics type port-mstprstp 0
+vlan create 40 name Wireless Guest type port-mstprstp 0
+vlan create 50 name Wireless Staff type port-mstprstp 0
+vlan create 168 name Staff type port-mstprstp 0
+
+! Map VLANs to I-SIDs
+vlan i-sid 1 2160001
+vlan i-sid 16 2160016
+vlan i-sid 20 2160020
+vlan i-sid 25 2160025
+vlan i-sid 30 2160030
+vlan i-sid 40 2160040
+vlan i-sid 50 2160050
+vlan i-sid 168 2160168
+
+! I-SID Names
+i-sid name 2160001 WA-Default
+i-sid name 2160016 WA-NetworkMGMT
+i-sid name 2160020 WA-StaffPrison
+i-sid name 2160025 WA-VoIP
+i-sid name 2160030 WA-Optics
+i-sid name 2160040 WA-Wireless Guest
+i-sid name 2160050 WA-Wireless Staff
+i-sid name 2160168 WA-Staff
+
+! Management Configuration
+no mgmt vlan
+mgmt vlan 16
+ip add 172.16.16.1/24
+ip route 0.0.0.0 0.0.0.0 next-hop 10.16.16.1 weight 1
+enable
+exit
+
+! Auto-Sense Device Type Handling
+auto-sense data i-sid 2160168
+auto-sense voice i-sid 2160025 c-vid 168
+auto-sense fa wap-type1 i-sid 2160016
+
+save config

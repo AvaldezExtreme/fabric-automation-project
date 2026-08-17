@@ -1,0 +1,57 @@
+enable
+configure terminal
+
+prompt SITE-IDF1A-01
+banner custom
+banner displaymotd
+banner motd "XYZ COUNTY SCHOOLS"
+
+
+! Configure VLANs and I-SIDs
+
+vlan create 8 name Netmgmt type port-mstprstp 0
+vlan create 16 name VoIP type port-mstprstp 0
+vlan create 24 name Security type port-mstprstp 0
+vlan create 32 name StaffWired type port-mstprstp 0
+vlan create 40 name StaffWlan type port-mstprstp 0
+vlan create 56 name StudentWired type port-mstprstp 0
+vlan create 64 name StudentWlan type port-mstprstp 0
+vlan create 72 name GuestWlan type port-mstprstp 0
+vlan create 80 name Hvac type port-mstprstp 0
+vlan create 88 name IoT type port-mstprstp 0
+
+vlan i-sid 1 12280001
+vlan i-sid 8 12280008 
+vlan i-sid 16 12280016 
+vlan i-sid 24 12280024 
+vlan i-sid 32 12280032 
+vlan i-sid 40 12280040 
+vlan i-sid 56 12280056 
+vlan i-sid 64 12280064 
+vlan i-sid 72 12280072 
+vlan i-sid 80 12280080 
+vlan i-sid 88 12280088
+
+i-sid name 12280001 LHES-Default
+i-sid name 12280008 LHES-Netmgmt
+i-sid name 12280016 LHES-VOIP
+i-sid name 12280024 LHES-Security
+i-sid name 12280032 LHES-StaffWired
+i-sid name 12280040 LHES-StaffWLAN
+i-sid name 12280056 LHES-StudentWired
+i-sid name 12280064 LHES-StudentWLAN
+i-sid name 12280072 LHES-GuestWLAN
+i-sid name 12280080 LHES-HVAC
+i-sid name 12280088 LHES-IoT
+
+auto-sense voice i-sid 12280016 c-vid 32
+auto-sense fa camera i-sid 12280024
+auto-sense fa wap-type1 i-sid 12280008
+auto-sense data i-sid 12280032
+
+no mgmt vlan
+mgmt vlan 8
+ip add 10.128.8.5/24
+ip route 0.0.0.0 0.0.0.0 next-hop 10.128.8.1 weight 1
+enable
+exit

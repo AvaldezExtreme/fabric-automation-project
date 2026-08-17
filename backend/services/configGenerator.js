@@ -1,0 +1,229 @@
+export const generateL3Config = (switchData, settings = {}) => {
+  const siteId = switchData.siteId;
+  const switchName = switchData.name;
+  const isidPrefix = switchData.isidPrefix;
+  const mgmtClipIp = `${siteId}.1.1.1/32`;
+  
+  // Use user input or default to 0.0.0.0
+  const defaultGateway = settings.l3DefaultGateway || '0.0.0.0';
+  const gatewayEnabled = settings.l3DefaultGateway ? 'yes' : 'no';
+  
+  let config = `! ============================================
+! Switch: ${switchName}
+! SiteID: ${siteId}
+! Layer 3 Distribution Switch
+! Generated: ${new Date().toISOString()}
+! ============================================
+
+enable
+configure terminal
+
+prompt ${switchName}
+
+`;
+
+  // Build VLAN creation commands
+  const vlansToConfig = switchData.vlans || [];
+  
+  config += '! Create VLANs\n';
+  vlansToConfig.forEach(vlan => {
+    const vlanId = vlan.vlanId;
+    const vlanName = vlan.vlanName;
+    config += `vlan create ${vlanId} name ${vlanName} type port-mstprstp 0\n`;
+  });
+  
+  // I-SID mappings
+  config += '\n! Map VLANs to I-SIDs\n';
+  vlansToConfig.forEach(vlan => {
+    config += `vlan i-sid ${vlan.vlanId} ${vlan.isid}\n`;
+  });
+  
+ // I-SID names
+  config += '\n! I-SID Names\n';
+  vlansToConfig.forEach(vlan => {
+    config += `i-sid name ${vlan.isid} ${vlan.isidName}\n`;
+  });
+  
+  // VLAN interfaces with DHCP relay
+  config += '\n! Configure VLAN Interfaces\n';
+  vlansToConfig.forEach(vlan => {
+    const subnet = vlan.subnet;
+    if (subnet && subnet !== 'NaN' && subnet.toLowerCase() !== 'nan') {
+      const [network, cidr] = subnet.split('/');
+      if (network && cidr) {
+        const octets = network.split('.');
+        const netmask = cidrToNetmask(cidr);
+        const gatewayIp = `${octets[0]}.${octets[1]}.${octets[2]}.1`;
+        
+        config += `
+interface vlan ${vlan.vlanId}
+ip address ${gatewayIp} ${netmask}
+ip spb-multicast enable
+ip igmp upnp-filter
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path ${settings.dhcpServer1 || '10.1.1.202'} enable
+ip dhcp-relay fwd-path ${settings.dhcpServer2 || '10.1.1.207'} enable
+exit
+`;
+      }
+    }
+  });
+  
+  // Management clip
+  config += `
+! Management CLIP
+no mgmt clip
+mgmt clip
+ip add ${mgmtClipIp}
+enable
+exit
+
+`;
+
+  // Default route (only if provided)
+  if (gatewayEnabled === 'yes') {
+    config += `! Default Route
+ip route 0.0.0.0 0.0.0.0 ${defaultGateway} weight 1
+
+`;
+  } else {
+    config += `! Default Route - NOT CONFIGURED (bypass enabled)
+! ip route 0.0.0.0 0.0.0.0 <ISP_GATEWAY> weight 1
+
+`;
+  }
+
+  // Auto-sense commands (only once!)
+  if (switchData.autoSenseCommands && switchData.autoSenseCommands.length > 0) {
+    config += '! Auto-Sense Device Type Handling\n';
+    switchData.autoSenseCommands.forEach(cmd => {
+      config += cmd.command + '\n';
+    });
+  }
+  
+  // WAN configuration if provided
+  if (settings.wanLinkIp) {
+    config += `
+! WAN Link Configuration
+interface vlan 1000
+ip address ${settings.wanLinkIp} ${settings.wanLinkNetmask || '255.255.255.0'}
+exit
+`;
+  }
+  
+  config += `
+save config
+`;
+  
+  return config;
+};
+
+export const generateL2Config = (switchData, settings = {}) => {
+  const switchName = switchData.name;
+  const siteId = switchData.siteId;
+  const isidPrefix = switchData.isidPrefix;
+  const location = switchData.location || 'Unknown Location';
+  
+  // Use M3 default gateway from Excel
+  const l2DefaultGateway = switchData.l2DefaultGateway || '10.0.0.254';
+  
+  let config = `! ============================================
+! Switch: ${switchName}
+! SiteID: ${siteId}
+! Layer 2 Access Switch
+! Generated: ${new Date().toISOString()}
+! ============================================
+
+enable
+configure terminal
+
+prompt ${switchName}
+banner custom
+banner displaymotd
+banner motd "${location}"
+
+`;
+
+  // Get management VLAN info - use MgmtVLAN column (Column Q) directly
+  const vlansToConfig = switchData.vlans || [];
+  const mgmtVlanId = switchData.mgmtVlan ? parseInt(switchData.mgmtVlan) : 8; // Default to 8 if not specified
+  
+  // Find the VLAN object for the management VLAN
+  const mgmtVlan = vlansToConfig.find(v => v.vlanId === mgmtVlanId);
+  
+  let mgmtIp = '10.0.0.1';
+  let mgmtGateway = l2DefaultGateway;
+  
+  if (mgmtVlan && mgmtVlan.subnet) {
+    const [network, cidr] = mgmtVlan.subnet.split('/');
+    if (network && cidr) {
+      const octets = network.split('.');
+      const lastOctet = switchData.mgmtIpOctet ? parseInt(switchData.mgmtIpOctet) : 1;
+      console.log(`DEBUG L2 ${switchData.name}: MgmtVLAN=${mgmtVlanId}, mgmtIpOctet="${switchData.mgmtIpOctet}", final IP="${octets[0]}.${octets[1]}.${octets[2]}.${lastOctet}"`);
+      mgmtIp = `${octets[0]}.${octets[1]}.${octets[2]}.${lastOctet}`;
+      mgmtGateway = l2DefaultGateway;
+    }
+  } else {
+    // If no subnet found, use default
+    console.log(`DEBUG L2 ${switchData.name}: Using default mgmt config for VLAN ${mgmtVlanId}`);
+  }
+  
+  // Create VLANs
+  config += '! Create VLANs\n';
+  vlansToConfig.forEach(vlan => {
+    config += `vlan create ${vlan.vlanId} name ${vlan.vlanName} type port-mstprstp 0\n`;
+  });
+  
+  // I-SID mappings
+  config += '\n! Map VLANs to I-SIDs\n';
+  vlansToConfig.forEach(vlan => {
+    config += `vlan i-sid ${vlan.vlanId} ${vlan.isid}\n`;
+  });
+  
+ // I-SID names
+  config += '\n! I-SID Names\n';
+  vlansToConfig.forEach(vlan => {
+    config += `i-sid name ${vlan.isid} ${vlan.isidName}\n`;
+  });
+  
+ // Calculate dynamic L2 gateway: 10.{SiteID}.{MgmtVLAN}.1
+  const dynamicL2Gateway = `10.${siteId}.${mgmtVlanId}.1`;
+  
+  // Management configuration (using dynamic gateway based on site and mgmt vlan)
+  config += `
+! Management Configuration
+no mgmt vlan
+mgmt vlan ${mgmtVlanId}
+ip add ${mgmtIp}/24
+ip route 0.0.0.0 0.0.0.0 next-hop ${dynamicL2Gateway} weight 1
+enable
+exit
+
+`;
+
+  // Auto-sense commands (only once!)
+  if (switchData.autoSenseCommands && switchData.autoSenseCommands.length > 0) {
+    config += '! Auto-Sense Device Type Handling\n';
+    switchData.autoSenseCommands.forEach(cmd => {
+      config += cmd.command + '\n';
+    });
+  }
+  
+  config += `
+save config
+`;
+  
+  return config;
+};
+
+const cidrToNetmask = (cidr) => {
+  const num = parseInt(cidr);
+  const mask = (0xffffffff << (32 - num)) >>> 0;
+  return [
+    (mask >>> 24) & 0xff,
+    (mask >>> 16) & 0xff,
+    (mask >>> 8) & 0xff,
+    mask & 0xff
+  ].join('.');
+};
