@@ -7,7 +7,8 @@
 import axios from 'axios';
 import tokenService from './tokenService.js';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// Use relative path for production (same origin), or VITE_API_URL for local dev
+const API_BASE_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : '');
 
 // Create axios instance
 const apiClient = axios.create({
