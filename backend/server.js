@@ -21,12 +21,6 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 if (NODE_ENV === 'production') {
   const frontendDist = join(__dirname, '../frontend/dist');
   app.use(express.static(frontendDist));
-  // Serve index.html for all non-API routes (SPA fallback)
-  app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api') && !req.path.includes('.')) {
-      res.sendFile(join(frontendDist, 'index.html'));
-    }
-  });
 }
 
 // ===== SECURITY MIDDLEWARE =====
@@ -115,6 +109,20 @@ app.get('/api/validate/status', (req, res) => {
 app.use('/api/upload', authMiddleware, uploadRoutes);
 app.use('/api/generate', authMiddleware, generateRoutes);
 app.use('/api/validate', authMiddleware, validateRoutes);
+
+// ===== SPA FALLBACK (AFTER ALL API ROUTES) =====
+if (NODE_ENV === 'production') {
+  const frontendDist = join(__dirname, '../frontend/dist');
+  app.get('*', (req, res, next) => {
+    if (!req.path.startsWith('/api') && !req.path.includes('.')) {
+      res.sendFile(join(frontendDist, 'index.html'), (err) => {
+        if (err) next(err);
+      });
+    } else {
+      next();
+    }
+  });
+}
 
 // ===== ERROR HANDLING MIDDLEWARE =====
 app.use((err, req, res, next) => {
