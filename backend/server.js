@@ -17,6 +17,18 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || 'localhost';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
+// Serve frontend static files in production
+if (NODE_ENV === 'production') {
+  const frontendDist = join(__dirname, '../frontend/dist');
+  app.use(express.static(frontendDist));
+  // Serve index.html for all non-API routes (SPA fallback)
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api') && !req.path.includes('.')) {
+      res.sendFile(join(frontendDist, 'index.html'));
+    }
+  });
+}
+
 // ===== SECURITY MIDDLEWARE =====
 // Helmet for security headers
 app.use(helmet({
