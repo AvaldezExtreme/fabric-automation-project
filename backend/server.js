@@ -14,7 +14,7 @@ import { authMiddleware } from './middleware/authMiddleware.js';
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 8080;
-const HOST = process.env.HOST || '0.0.0.0';
+const HOST = process.env.HOST || 'localhost';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Serve frontend static files in production
@@ -138,7 +138,7 @@ app.use((req, res) => {
 });
 
 // ===== START SERVER =====
-app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║     Network Configuration Automation Tool - Backend v2       ║
@@ -158,4 +158,9 @@ app.listen(PORT, HOST, () => {
     console.log('🔐 Login: POST http://localhost:3001/api/auth/login');
     console.log('   Credentials defined in .env VALID_USERS');
   }
+});
+
+server.on('error', (err) => {
+  console.error('Server error:', err);
+  process.exit(1);
 });
