@@ -14,7 +14,7 @@ import { authMiddleware } from './middleware/authMiddleware.js';
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || 'localhost';
+const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 // Serve frontend static files in production
