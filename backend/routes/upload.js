@@ -1,14 +1,9 @@
 import express from 'express';
-import { writeFileSync, unlinkSync } from 'fs';
-import { join } from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import { parseExcelFile, extractNetworkData, buildTopology } from '../services/excelParser.js';
+import { parseExcelBuffer, extractNetworkData, buildTopology } from '../services/excelParser.js';
 
 const router = express.Router();
 
 router.post('/', async (req, res) => {
-  let filePath;
-
   try {
     const { filename, data } = req.body;
 
@@ -29,13 +24,9 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Only Excel files (.xlsx, .xls, .xlsm) are supported' });
     }
 
-    // Decode base64 and write to disk
+    // Decode base64 and parse in memory - no disk writes needed
     const buffer = Buffer.from(data, 'base64');
-    filePath = join('./backend/uploads', `${uuidv4()}_${sanitized}`);
-    writeFileSync(filePath, buffer);
-    
-    // Parse Excel
-    const excelSheets = parseExcelFile(filePath);
+    const excelSheets = parseExcelBuffer(buffer);
 
     const switches = extractNetworkData(excelSheets);
 
@@ -44,7 +35,7 @@ router.post('/', async (req, res) => {
     }
 
     const topology = buildTopology(switches);
-    
+
     res.json({
       success: true,
       data: {
@@ -56,21 +47,15 @@ router.post('/', async (req, res) => {
       },
       timestamp: new Date().toISOString()
     });
-    
+
   } catch (error) {
+    // Log the real cause server-side so deploy logs are actionable
+    console.error(`[upload] ${error.message}`);
     res.status(400).json({
       error: 'Failed to process file',
       code: 'UPLOAD_ERROR',
       timestamp: new Date().toISOString()
     });
-  } finally {
-    if (filePath) {
-      try {
-        unlinkSync(filePath);
-      } catch (err) {
-        // Fail silently if temp file cleanup fails
-      }
-    }
   }
 });
 

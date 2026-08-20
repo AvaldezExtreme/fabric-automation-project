@@ -1,18 +1,29 @@
 import XLSX from 'xlsx';
 import { sanitizeInput } from '../middleware/validation.js';
 
+const workbookToSheets = (workbook) => {
+  const sheets = {};
+
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+    sheets[sheetName] = data;
+  }
+
+  return sheets;
+};
+
 export const parseExcelFile = (filePath) => {
   try {
-    const workbook = XLSX.readFile(filePath);
-    const sheets = {};
-    
-    for (const sheetName of workbook.SheetNames) {
-      const worksheet = workbook.Sheets[sheetName];
-      const data = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
-      sheets[sheetName] = data;
-    }
-    
-    return sheets;
+    return workbookToSheets(XLSX.readFile(filePath));
+  } catch (error) {
+    throw new Error(`Failed to parse Excel file: ${error.message}`);
+  }
+};
+
+export const parseExcelBuffer = (buffer) => {
+  try {
+    return workbookToSheets(XLSX.read(buffer, { type: 'buffer' }));
   } catch (error) {
     throw new Error(`Failed to parse Excel file: ${error.message}`);
   }
