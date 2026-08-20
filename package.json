@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "node backend/server.js",
-    "start": "npm ci --only=production && cd frontend && npm ci --only=production && npm run build && cd .. && node backend/server.js"
+    "start": "npm install --omit=dev && cd frontend && npm install && npm run build && cd .. && node backend/server.js"
   },
   "keywords": ["extreme", "networks", "switch", "configuration", "automation"],
   "author": "",
