@@ -441,7 +441,7 @@ function Export({ data, onNext, onBack }) {
             fontWeight: 'bold'
           }}
         >
-          → Continue to Visualization
+          → Continue to Validation
         </button>
       </div>
     </div>

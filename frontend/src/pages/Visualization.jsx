@@ -1,22 +1,236 @@
 // ============================================
 // Topology Visualization - Interactive & PDF Export
-// Version: V2608173
-// Purpose: Professional topology visualization with PDF export
+// Version: V2608174
+// Purpose: Professional fabric topology with hierarchical layout,
+//          animated links, and PDF export (bundled jsPDF/html2canvas)
 // ============================================
 
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+
+// ---------- Layout helpers ----------
+
+const CANVAS_W = 1000;
+const NODE_W = 168;
+const NODE_H = 78;
+const L2_PER_ROW = 4;
+
+function layoutSite(switches) {
+  const l3 = switches.filter(sw => sw.type === 'L3');
+  const l2 = switches.filter(sw => sw.type !== 'L3');
+
+  const positions = new Map();
+
+  // Core row (L3) centered on top
+  const coreY = 110;
+  l3.forEach((sw, i) => {
+    const x = (CANVAS_W / (l3.length + 1)) * (i + 1);
+    positions.set(sw.name, { x, y: coreY, sw });
+  });
+
+  // Access rows (L2) below, wrapped
+  const startY = l3.length > 0 ? 300 : 140;
+  const rows = Math.max(1, Math.ceil(l2.length / L2_PER_ROW));
+  l2.forEach((sw, i) => {
+    const row = Math.floor(i / L2_PER_ROW);
+    const inRow = Math.min(L2_PER_ROW, l2.length - row * L2_PER_ROW);
+    const col = i % L2_PER_ROW;
+    const x = (CANVAS_W / (inRow + 1)) * (col + 1);
+    const y = startY + row * 170;
+    positions.set(sw.name, { x, y, sw });
+  });
+
+  const height = Math.max(420, startY + rows * 170 - 40);
+  return { positions, l3, l2, height };
+}
+
+function truncate(str, max = 18) {
+  if (!str) return '';
+  return str.length > max ? str.slice(0, max - 1) + '…' : str;
+}
+
+// ---------- Topology SVG (shared by screen + PDF) ----------
+
+function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
+  const [hovered, setHovered] = useState(null);
+  const { positions, l3, l2, height } = layoutSite(site.switches);
+
+  const links = [];
+  if (l3.length > 0) {
+    // Core interconnect (L3 <-> L3)
+    for (let i = 0; i < l3.length - 1; i++) {
+      links.push({ from: l3[i].name, to: l3[i + 1].name, kind: 'core' });
+    }
+    // Fabric uplinks: every L2 to every L3
+    l2.forEach(a => l3.forEach(c => links.push({ from: c.name, to: a.name, kind: 'fabric' })));
+  } else {
+    // No core: chain the access switches
+    for (let i = 0; i < l2.length - 1; i++) {
+      links.push({ from: l2[i].name, to: l2[i + 1].name, kind: 'fabric' });
+    }
+  }
+
+  return (
+    <svg
+      width="100%"
+      viewBox={`0 0 ${CANVAS_W} ${height}`}
+      style={{ display: 'block', borderRadius: '10px', background: 'linear-gradient(160deg, #1a0533 0%, #2d0a54 55%, #1a0533 100%)' }}
+    >
+      <defs>
+        <linearGradient id="gradL3" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#00e6ac" />
+          <stop offset="100%" stopColor="#00926b" />
+        </linearGradient>
+        <linearGradient id="gradL2" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffb340" />
+          <stop offset="100%" stopColor="#e07800" />
+        </linearGradient>
+        <linearGradient id="gradSel" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#9a4dff" />
+          <stop offset="100%" stopColor="#5B059C" />
+        </linearGradient>
+        <filter id="nodeShadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.45" />
+        </filter>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="5" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      {/* Site banner */}
+      <text x={CANVAS_W / 2} y="38" textAnchor="middle" fontSize="20" fontWeight="700" fill="#ffffff" opacity="0.95">
+        {site.name}
+      </text>
+      <text x={CANVAS_W / 2} y="60" textAnchor="middle" fontSize="12" fill="#c9a8ff">
+        {l3.length} core · {l2.length} access · SPB Fabric
+      </text>
+
+      {/* Links */}
+      {links.map((lnk, idx) => {
+        const a = positions.get(lnk.from);
+        const b = positions.get(lnk.to);
+        if (!a || !b) return null;
+
+        if (lnk.kind === 'core') {
+          return (
+            <line
+              key={`lnk-${idx}`}
+              x1={a.x + NODE_W / 2 - 10} y1={a.y}
+              x2={b.x - NODE_W / 2 + 10} y2={b.y}
+              stroke="#00e6ac" strokeWidth="4" opacity="0.85"
+              strokeDasharray="10 6"
+            >
+              <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1.2s" repeatCount="indefinite" />
+            </line>
+          );
+        }
+
+        const y1 = a.y + NODE_H / 2 - 6;
+        const y2 = b.y - NODE_H / 2 + 6;
+        const path = `M ${a.x} ${y1} C ${a.x} ${y1 + 70}, ${b.x} ${y2 - 70}, ${b.x} ${y2}`;
+        return (
+          <path
+            key={`lnk-${idx}`}
+            d={path}
+            fill="none"
+            stroke="#b57bff"
+            strokeWidth="2"
+            opacity="0.55"
+            strokeDasharray="7 5"
+          >
+            <animate attributeName="stroke-dashoffset" from="24" to="0" dur="1.4s" repeatCount="indefinite" />
+          </path>
+        );
+      })}
+
+      {/* Nodes */}
+      {Array.from(positions.values()).map(({ x, y, sw }) => {
+        const isSelected = sw.name === selectedSwitch;
+        const isHovered = interactive && sw.name === hovered;
+        const grad = isSelected ? 'url(#gradSel)' : sw.type === 'L3' ? 'url(#gradL3)' : 'url(#gradL2)';
+
+        return (
+          <g
+            key={sw.name}
+            transform={`translate(${x - NODE_W / 2}, ${y - NODE_H / 2})`}
+            onClick={interactive ? () => onSelect(isSelected ? null : sw.name) : undefined}
+            onMouseEnter={interactive ? () => setHovered(sw.name) : undefined}
+            onMouseLeave={interactive ? () => setHovered(null) : undefined}
+            style={interactive ? { cursor: 'pointer' } : undefined}
+            filter={isSelected || isHovered ? 'url(#glow)' : 'url(#nodeShadow)'}
+          >
+            {/* Chassis */}
+            <rect
+              width={NODE_W} height={NODE_H} rx="12"
+              fill={grad}
+              stroke={isSelected ? '#ffffff' : isHovered ? '#e9d5ff' : 'rgba(255,255,255,0.25)'}
+              strokeWidth={isSelected ? 3 : 1.5}
+            />
+
+            {/* Status LED */}
+            <circle cx="16" cy="16" r="4" fill="#3dff8f">
+              <animate attributeName="opacity" values="1;0.35;1" dur="2s" repeatCount="indefinite" />
+            </circle>
+
+            {/* Type badge */}
+            <rect x={NODE_W - 46} y="8" width="38" height="17" rx="8" fill="rgba(0,0,0,0.35)" />
+            <text x={NODE_W - 27} y="20" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">
+              {sw.type === 'L3' ? 'CORE' : 'ACC'}
+            </text>
+
+            {/* Name */}
+            <text x={NODE_W / 2} y="40" textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">
+              {truncate(sw.name)}
+            </text>
+
+            {/* VLAN count */}
+            <text x={NODE_W / 2} y="55" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.85)">
+              {(sw.vlans?.length || 0)} VLANs{sw.closet ? ` · ${truncate(sw.closet, 10)}` : ''}
+            </text>
+
+            {/* Port strip */}
+            {Array.from({ length: 10 }).map((_, p) => (
+              <rect
+                key={p}
+                x={14 + p * 14} y={NODE_H - 13} width="9" height="6" rx="1.5"
+                fill="rgba(255,255,255,0.55)"
+              />
+            ))}
+          </g>
+        );
+      })}
+
+      {/* Legend */}
+      <g transform={`translate(20, ${height - 30})`} fontSize="11" fill="#e0ceff">
+        <rect x="0" y="-10" width="14" height="10" rx="3" fill="url(#gradL3)" />
+        <text x="20" y="0">Core (L3)</text>
+        <rect x="95" y="-10" width="14" height="10" rx="3" fill="url(#gradL2)" />
+        <text x="115" y="0">Access (L2)</text>
+        <line x1="205" y1="-5" x2="235" y2="-5" stroke="#b57bff" strokeWidth="2" strokeDasharray="7 5" />
+        <text x="242" y="0">Fabric link</text>
+      </g>
+    </svg>
+  );
+}
+
+// ---------- Main page ----------
 
 function Visualization({ data, onNext, onBack }) {
   const [selectedSite, setSelectedSite] = useState(null);
   const [selectedSwitch, setSelectedSwitch] = useState(null);
   const [exportMode, setExportMode] = useState(null);
-  const canvasRef = useRef(null);
+  const [exporting, setExporting] = useState(false);
 
   if (!data || !data.switches || data.switches.length === 0) {
     return <div style={styles.noData}>No topology data available</div>;
   }
 
-  // Get unique sites
+  // Group switches by site
   const sitesMap = new Map();
   data.switches.forEach(sw => {
     if (!sitesMap.has(sw.siteId)) {
@@ -32,303 +246,160 @@ function Visualization({ data, onNext, onBack }) {
   const sites = Array.from(sitesMap.values()).sort((a, b) => a.id - b.id);
   const currentSite = selectedSite || sites[0];
   const switchesInSite = currentSite.switches || [];
-
-  // Get connections between switches (based on topology from upload)
-  const getConnections = () => {
-    const connections = [];
-    switchesInSite.forEach((sw1, idx1) => {
-      switchesInSite.forEach((sw2, idx2) => {
-        if (idx1 < idx2) {
-          // Create connection based on switch relationships
-          if (sw1.type === 'L3' && sw2.type === 'L2') {
-            connections.push({ from: sw1.name, to: sw2.name, type: 'fabric' });
-          } else if (sw1.type === 'L2' && sw2.type === 'L2') {
-            connections.push({ from: sw1.name, to: sw2.name, type: 'mesh' });
-          }
-        }
-      });
-    });
-    return connections;
-  };
-
-  const connections = getConnections();
   const selectedSwitchData = switchesInSite.find(s => s.name === selectedSwitch);
 
-  // Generate PDF export
-  const generatePDF = async (scope) => {
+  // PDF export using bundled jsPDF + html2canvas (no CDN - blocked by CSP)
+  const generatePDF = (scope) => {
     setExportMode(scope);
-    setTimeout(() => {
-      const element = document.getElementById('pdf-content');
-      if (!element) return;
+    setExporting(true);
 
-      // Use html2pdf library (load from CDN)
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    setTimeout(async () => {
+      try {
+        const element = document.getElementById('pdf-content');
+        if (!element) throw new Error('PDF content not found');
 
-      script.onload = () => {
-        const opt = {
-          margin: [10, 10, 10, 10],
-          filename: `FACE-Topology-${scope === 'all' ? 'All-Sites' : currentSite.name.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.pdf`,
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2 },
-          jsPDF: { orientation: 'landscape', unit: 'mm', format: 'a3' }
-        };
+        const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff' });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
-        html2pdf().set(opt).from(element).save();
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const imgH = (canvas.height * pageW) / canvas.width;
+
+        let heightLeft = imgH;
+        let position = 0;
+        pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+        heightLeft -= pageH;
+        while (heightLeft > 0) {
+          position -= pageH;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+          heightLeft -= pageH;
+        }
+
+        const siteName = scope === 'all' ? 'All-Sites' : currentSite.name.replace(/\s+/g, '-');
+        pdf.save(`FACE-Topology-${siteName}-${new Date().toISOString().split('T')[0]}.pdf`);
+      } catch (err) {
+        alert(`PDF export failed: ${err.message}`);
+      } finally {
         setExportMode(null);
-      };
-
-      document.head.appendChild(script);
-    }, 100);
+        setExporting(false);
+      }
+    }, 200);
   };
 
   return (
     <div className="page-visualization" style={styles.container}>
       <h2>Step 6: Network Topology Visualization</h2>
       <p className="page-description">
-        Interactive topology view - Click a site to view its topology, click switches for details
+        Click a site to view its fabric, click any switch for full details
       </p>
 
+      {/* Site Selector */}
+      <div style={styles.siteSelector}>
+        {sites.map(site => (
+          <button
+            key={site.id}
+            onClick={() => {
+              setSelectedSite(site);
+              setSelectedSwitch(null);
+            }}
+            style={{
+              ...styles.siteTab,
+              background: currentSite.id === site.id
+                ? 'linear-gradient(135deg, #7519F9, #5B059C)'
+                : '#EFEFEF',
+              color: currentSite.id === site.id ? 'white' : '#444',
+              boxShadow: currentSite.id === site.id ? '0 4px 12px rgba(117,25,249,0.4)' : 'none'
+            }}
+          >
+            📍 {site.name} <span style={styles.switchCount}>({site.switches.length})</span>
+          </button>
+        ))}
+      </div>
+
       <div style={styles.mainLayout}>
-        {/* Left Panel: Site Selector & Topology Canvas */}
-        <div style={styles.leftPanel}>
-          {/* Site Selector */}
-          <div style={styles.siteSelector}>
-            <h3 style={styles.sectionTitle}>📍 Select Site</h3>
-            <div style={styles.siteTabs}>
-              {sites.map(site => (
-                <button
-                  key={site.id}
-                  onClick={() => {
-                    setSelectedSite(site);
-                    setSelectedSwitch(null);
-                  }}
-                  style={{
-                    ...styles.siteTab,
-                    backgroundColor: currentSite.id === site.id ? '#5B059C' : '#E8E8E8',
-                    color: currentSite.id === site.id ? 'white' : '#333'
-                  }}
-                >
-                  {site.name} <span style={styles.switchCount}>({site.switches.length})</span>
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Topology Canvas */}
+        <div style={styles.canvasPanel}>
+          <TopologySVG
+            site={currentSite}
+            selectedSwitch={selectedSwitch}
+            onSelect={setSelectedSwitch}
+          />
 
-          {/* Topology Canvas */}
-          <div style={styles.canvasContainer}>
-            <h3 style={styles.sectionTitle}>🔗 Network Topology</h3>
-            <svg
-              ref={canvasRef}
-              width="100%"
-              height="400"
-              style={styles.canvas}
-              viewBox="0 0 800 400"
+          {/* Export bar */}
+          <div style={styles.exportBar}>
+            <span style={styles.exportLabel}>📥 Export topology report:</span>
+            <button onClick={() => generatePDF('site')} disabled={exporting} style={styles.exportBtn}>
+              {exporting && exportMode === 'site' ? 'Generating…' : `📄 ${truncate(currentSite.name, 22)}`}
+            </button>
+            <button
+              onClick={() => generatePDF('all')}
+              disabled={exporting}
+              style={{ ...styles.exportBtn, background: 'linear-gradient(135deg, #00CC99, #00926b)' }}
             >
-              <defs>
-                <marker
-                  id="arrowhead"
-                  markerWidth="10"
-                  markerHeight="10"
-                  refX="9"
-                  refY="3"
-                  orient="auto"
-                >
-                  <polygon points="0 0, 10 3, 0 6" fill="#5B059C" />
-                </marker>
-              </defs>
-
-              {/* Draw connections first (background) */}
-              {connections.map((conn, idx) => {
-                const fromIdx = switchesInSite.findIndex(s => s.name === conn.from);
-                const toIdx = switchesInSite.findIndex(s => s.name === conn.to);
-                const fromX = 100 + fromIdx * 150;
-                const fromY = 200;
-                const toX = 100 + toIdx * 150;
-                const toY = 200;
-
-                return (
-                  <g key={`conn-${idx}`}>
-                    {/* Connection line */}
-                    <line
-                      x1={fromX}
-                      y1={fromY}
-                      x2={toX}
-                      y2={toY}
-                      stroke={conn.type === 'fabric' ? '#5B059C' : '#FF9900'}
-                      strokeWidth="2"
-                      markerEnd="url(#arrowhead)"
-                    />
-                    {/* Connection label */}
-                    <text
-                      x={(fromX + toX) / 2}
-                      y={(fromY + toY) / 2 - 10}
-                      textAnchor="middle"
-                      fontSize="11"
-                      fill="#666"
-                      fontWeight="bold"
-                    >
-                      {conn.type === 'fabric' ? 'Fabric' : 'Mesh'}
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Draw switches */}
-              {switchesInSite.map((sw, idx) => {
-                const x = 100 + idx * 150;
-                const y = 200;
-                const isSelected = sw.name === selectedSwitch;
-
-                return (
-                  <g
-                    key={sw.name}
-                    onClick={() => setSelectedSwitch(isSelected ? null : sw.name)}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    {/* Switch box */}
-                    <rect
-                      x={x - 50}
-                      y={y - 40}
-                      width="100"
-                      height="80"
-                      fill={isSelected ? '#5B059C' : sw.type === 'L3' ? '#00CC99' : '#FF9900'}
-                      stroke={isSelected ? '#fff' : '#333'}
-                      strokeWidth={isSelected ? '3' : '2'}
-                      rx="8"
-                    />
-
-                    {/* Switch name */}
-                    <text
-                      x={x}
-                      y={y - 15}
-                      textAnchor="middle"
-                      fontSize="12"
-                      fontWeight="bold"
-                      fill="white"
-                    >
-                      {sw.name}
-                    </text>
-
-                    {/* Switch type */}
-                    <text
-                      x={x}
-                      y={y + 5}
-                      textAnchor="middle"
-                      fontSize="11"
-                      fill="white"
-                    >
-                      {sw.type} Switch
-                    </text>
-
-                    {/* VLAN count */}
-                    <text
-                      x={x}
-                      y={y + 25}
-                      textAnchor="middle"
-                      fontSize="10"
-                      fill="white"
-                      opacity="0.8"
-                    >
-                      {(sw.vlans?.length || 0)} VLANs
-                    </text>
-                  </g>
-                );
-              })}
-
-              {/* Background info */}
-              <text x="10" y="30" fontSize="12" fill="#999">
-                Click a switch for details
-              </text>
-            </svg>
-          </div>
-
-          {/* Export Options */}
-          <div style={styles.exportSection}>
-            <h3 style={styles.sectionTitle}>📥 Export to PDF</h3>
-            <div style={styles.exportButtons}>
-              <button
-                onClick={() => generatePDF('site')}
-                style={styles.exportBtn}
-              >
-                📄 {currentSite.name} Site Only
-              </button>
-              <button
-                onClick={() => generatePDF('all')}
-                style={{ ...styles.exportBtn, backgroundColor: '#00CC99' }}
-              >
-                📊 All Sites Network
-              </button>
-            </div>
+              {exporting && exportMode === 'all' ? 'Generating…' : '📊 All Sites'}
+            </button>
           </div>
         </div>
 
-        {/* Right Panel: Switch Details */}
+        {/* Details Panel */}
         <div style={styles.rightPanel}>
           {selectedSwitchData ? (
             <div>
-              <h3 style={styles.sectionTitle}>🖥️ Switch Details</h3>
+              <h3 style={styles.sectionTitle}>🖥️ {selectedSwitchData.name}</h3>
 
               <div style={styles.detailsCard}>
                 <div style={styles.detailRow}>
-                  <span style={styles.label}>Name:</span>
-                  <span style={styles.value}>{selectedSwitchData.name}</span>
-                </div>
-                <div style={styles.detailRow}>
-                  <span style={styles.label}>Type:</span>
+                  <span style={styles.label}>Type</span>
                   <span style={{
-                    ...styles.value,
-                    backgroundColor: selectedSwitchData.type === 'L3' ? '#00CC99' : '#FF9900',
-                    color: 'white',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    display: 'inline-block'
+                    ...styles.typeBadge,
+                    background: selectedSwitchData.type === 'L3'
+                      ? 'linear-gradient(135deg, #00CC99, #00926b)'
+                      : 'linear-gradient(135deg, #ffb340, #e07800)'
                   }}>
-                    {selectedSwitchData.type} Switch
+                    {selectedSwitchData.type === 'L3' ? 'Core (L3)' : 'Access (L2)'}
                   </span>
                 </div>
                 <div style={styles.detailRow}>
-                  <span style={styles.label}>Site ID:</span>
-                  <span style={styles.value}>{selectedSwitchData.siteId}</span>
+                  <span style={styles.label}>Site</span>
+                  <span style={styles.value}>{selectedSwitchData.location || selectedSwitchData.siteId}</span>
                 </div>
                 <div style={styles.detailRow}>
-                  <span style={styles.label}>Location:</span>
-                  <span style={styles.value}>{selectedSwitchData.location || 'Not specified'}</span>
+                  <span style={styles.label}>Closet</span>
+                  <span style={styles.value}>{selectedSwitchData.closet || '—'}</span>
                 </div>
                 <div style={styles.detailRow}>
-                  <span style={styles.label}>Closet:</span>
-                  <span style={styles.value}>{selectedSwitchData.closet || 'Not specified'}</span>
+                  <span style={styles.label}>Mgmt VLAN</span>
+                  <span style={styles.value}>{selectedSwitchData.mgmtVlan || '—'}</span>
                 </div>
                 <div style={styles.detailRow}>
-                  <span style={styles.label}>Management IP:</span>
-                  <span style={styles.value}>{selectedSwitchData.mgmtIp || 'Not configured'}</span>
+                  <span style={styles.label}>Gateway</span>
+                  <span style={styles.value}>{selectedSwitchData.defaultGateway || '—'}</span>
                 </div>
-                <div style={styles.divider}></div>
+                {selectedSwitchData.mgmtIp && (
+                  <div style={styles.detailRow}>
+                    <span style={styles.label}>Mgmt IP</span>
+                    <span style={styles.value}>{selectedSwitchData.mgmtIp}</span>
+                  </div>
+                )}
 
-                <h4 style={styles.subTitle}>VLANs & I-SIDs</h4>
+                <h4 style={styles.subTitle}>
+                  VLANs & I-SIDs ({selectedSwitchData.vlans?.length || 0})
+                </h4>
                 <div style={styles.vlanList}>
                   {selectedSwitchData.vlans && selectedSwitchData.vlans.length > 0 ? (
                     selectedSwitchData.vlans.map((vlan, idx) => (
                       <div key={idx} style={styles.vlanItem}>
-                        <div style={styles.vlanId}>
-                          VLAN {vlan.vlanId}
+                        <div style={styles.vlanHeader}>
+                          <span style={styles.vlanId}>VLAN {vlan.vlanId}</span>
+                          <span style={styles.vlanNameTag}>{vlan.vlanName || vlan.name || ''}</span>
                         </div>
-                        <div style={styles.vlanName}>
-                          {vlan.name}
+                        <div style={styles.vlanMeta}>
+                          I-SID {vlan.isid || vlan.i_sid || '—'}
+                          {vlan.subnet ? ` · ${vlan.subnet}` : ''}
+                          {vlan.ip ? ` · ${vlan.ip}` : ''}
                         </div>
-                        <div style={styles.vlanIsid}>
-                          I-SID: {vlan.isid || vlan.i_sid || 'N/A'}
-                        </div>
-                        {vlan.subnet && (
-                          <div style={styles.vlanSubnet}>
-                            Subnet: {vlan.subnet}
-                          </div>
-                        )}
-                        {vlan.ip && (
-                          <div style={styles.vlanIp}>
-                            IP: {vlan.ip}
-                          </div>
-                        )}
                       </div>
                     ))
                   ) : (
@@ -339,27 +410,21 @@ function Visualization({ data, onNext, onBack }) {
             </div>
           ) : (
             <div style={styles.emptyState}>
-              <div style={styles.emptyIcon}>👆</div>
-              <h4>Click a switch to view details</h4>
-              <p>Select a switch from the topology diagram to see its configuration including:</p>
-              <ul style={styles.featureList}>
-                <li>Management IP address</li>
-                <li>Assigned VLANs</li>
-                <li>I-SID mappings</li>
-                <li>Subnet information</li>
-                <li>Device type</li>
-              </ul>
+              <div style={styles.emptyIcon}>🔍</div>
+              <h4>Select a switch</h4>
+              <p style={{ fontSize: '13px' }}>
+                Click any switch in the diagram to see its VLANs, I-SIDs, subnets, and management details.
+              </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Hidden PDF content (for export) */}
-      <div id="pdf-content" style={{ display: 'none' }}>
-        <PDFContent
-          sites={exportMode === 'all' ? sites : [currentSite]}
-          data={data}
-        />
+      {/* Off-screen PDF content (html2canvas can't capture display:none) */}
+      <div id="pdf-content" style={styles.pdfHolder}>
+        {exportMode && (
+          <PDFContent sites={exportMode === 'all' ? sites : [currentSite]} />
+        )}
       </div>
 
       {/* Navigation */}
@@ -368,213 +433,223 @@ function Visualization({ data, onNext, onBack }) {
           ← Back
         </button>
         <button onClick={() => onNext(data)} style={styles.nextBtn}>
-          Complete ✓
+          Test & Verify →
         </button>
       </div>
     </div>
   );
 }
 
-// PDF Content Component
-function PDFContent({ sites, data }) {
+// ---------- PDF report content ----------
+
+function PDFContent({ sites }) {
   return (
-    <div style={{ padding: '20px', fontFamily: 'Arial, sans-serif' }}>
-      <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-        <h1>FACE - Network Topology Report</h1>
-        <p>Fabric Auto Configuration Engine v2.0 (V2608173)</p>
-        <p style={{ color: '#999' }}>
-          Generated: {new Date().toLocaleString()}
-        </p>
+    <div style={{ padding: '24px', fontFamily: 'Arial, sans-serif', width: '1350px', background: '#fff' }}>
+      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <h1 style={{ color: '#5B059C', marginBottom: '4px' }}>FACE — Network Topology Report</h1>
+        <p style={{ margin: 0 }}>Fabric Auto Configuration Engine</p>
+        <p style={{ color: '#999', margin: '4px 0 0' }}>Generated: {new Date().toLocaleString()}</p>
       </div>
 
       {sites.map(site => (
-        <div key={site.id} style={{ pageBreakAfter: 'always', marginBottom: '40px' }}>
-          <h2 style={{ borderBottom: '3px solid #5B059C', paddingBottom: '10px' }}>
+        <div key={site.id} style={{ marginBottom: '36px' }}>
+          <h2 style={{ borderBottom: '3px solid #5B059C', paddingBottom: '8px' }}>
             📍 {site.name} (Site {site.id})
           </h2>
 
-          {/* Site Overview */}
-          <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-            <h3>Site Overview</h3>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <tbody>
-                <tr style={{ backgroundColor: '#f0f0f0' }}>
-                  <td style={styles.tableCell}>Total Switches</td>
-                  <td style={styles.tableCell}>{site.switches.length}</td>
-                </tr>
-                <tr>
-                  <td style={styles.tableCell}>L2 Switches</td>
-                  <td style={styles.tableCell}>
-                    {site.switches.filter(s => s.type === 'L2').length}
-                  </td>
-                </tr>
-                <tr style={{ backgroundColor: '#f0f0f0' }}>
-                  <td style={styles.tableCell}>L3 Switches</td>
-                  <td style={styles.tableCell}>
-                    {site.switches.filter(s => s.type === 'L3').length}
-                  </td>
-                </tr>
-                <tr>
-                  <td style={styles.tableCell}>Total VLANs</td>
-                  <td style={styles.tableCell}>
-                    {site.switches.reduce((sum, s) => sum + (s.vlans?.length || 0), 0)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          {/* Topology diagram */}
+          <div style={{ margin: '16px 0' }}>
+            <TopologySVG site={site} selectedSwitch={null} onSelect={() => {}} interactive={false} />
           </div>
 
-          {/* Switches Detail */}
-          <h3 style={{ marginTop: '30px' }}>Switches in This Site</h3>
+          {/* Per-switch tables */}
           {site.switches.map(sw => (
-            <div key={sw.name} style={{ marginBottom: '20px', paddingLeft: '20px', borderLeft: '3px solid #5B059C' }}>
-              <h4>{sw.name}</h4>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
-                <tbody>
-                  <tr style={{ backgroundColor: '#f9f9f9' }}>
-                    <td style={styles.tableCell}>Type</td>
-                    <td style={styles.tableCell}>{sw.type} Switch</td>
-                  </tr>
-                  <tr>
-                    <td style={styles.tableCell}>Management IP</td>
-                    <td style={styles.tableCell}>{sw.mgmtIp || 'Not configured'}</td>
-                  </tr>
-                  <tr style={{ backgroundColor: '#f9f9f9' }}>
-                    <td style={styles.tableCell}>VLANs</td>
-                    <td style={styles.tableCell}>{sw.vlans?.length || 0}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              {/* VLANs */}
+            <div key={sw.name} style={{ marginBottom: '18px', paddingLeft: '16px', borderLeft: '4px solid #5B059C' }}>
+              <h4 style={{ margin: '8px 0' }}>
+                {sw.name} — {sw.type === 'L3' ? 'Core (L3)' : 'Access (L2)'}
+                {sw.closet ? ` — ${sw.closet}` : ''}
+              </h4>
               {sw.vlans && sw.vlans.length > 0 && (
-                <div style={{ marginTop: '10px', fontSize: '10px' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                    <thead>
-                      <tr style={{ backgroundColor: '#5B059C', color: 'white' }}>
-                        <th style={styles.tableCell}>VLAN ID</th>
-                        <th style={styles.tableCell}>Name</th>
-                        <th style={styles.tableCell}>I-SID</th>
-                        <th style={styles.tableCell}>Subnet</th>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#5B059C', color: 'white' }}>
+                      <th style={styles.tableCell}>VLAN ID</th>
+                      <th style={styles.tableCell}>Name</th>
+                      <th style={styles.tableCell}>I-SID</th>
+                      <th style={styles.tableCell}>Subnet</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sw.vlans.map((v, idx) => (
+                      <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f6f0fc' }}>
+                        <td style={styles.tableCell}>{v.vlanId}</td>
+                        <td style={styles.tableCell}>{v.vlanName || v.name || ''}</td>
+                        <td style={styles.tableCell}>{v.isid || v.i_sid || '—'}</td>
+                        <td style={styles.tableCell}>{v.subnet || '—'}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {sw.vlans.map((v, idx) => (
-                        <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f9f9f9' }}>
-                          <td style={styles.tableCell}>{v.vlanId}</td>
-                          <td style={styles.tableCell}>{v.name}</td>
-                          <td style={styles.tableCell}>{v.isid || v.i_sid || 'N/A'}</td>
-                          <td style={styles.tableCell}>{v.subnet || 'N/A'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               )}
             </div>
           ))}
         </div>
       ))}
 
-      <div style={{ marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #ccc', fontSize: '10px', color: '#999' }}>
-        <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.0</p>
+      <div style={{ marginTop: '24px', paddingTop: '12px', borderTop: '1px solid #ccc', fontSize: '10px', color: '#999' }}>
+        <p>© 2026 Extreme Networks, Inc. | FACE — Fabric Auto Configuration Engine</p>
       </div>
     </div>
   );
 }
 
+// ---------- Styles ----------
+
 const styles = {
   container: {
-    maxWidth: '1400px',
+    maxWidth: '1500px',
     padding: '20px'
   },
   noData: {
     padding: '2rem',
     color: '#6b7280'
   },
-  mainLayout: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '20px',
-    marginTop: '20px'
-  },
-  leftPanel: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '20px'
-  },
-  rightPanel: {
-    backgroundColor: '#f9f9f9',
-    border: '2px solid #E8E8E8',
-    borderRadius: '8px',
-    padding: '20px',
-    overflow: 'auto',
-    maxHeight: '800px'
-  },
   siteSelector: {
-    backgroundColor: 'white',
-    border: '1px solid #E8E8E8',
-    borderRadius: '8px',
-    padding: '15px'
-  },
-  sectionTitle: {
-    fontSize: '14px',
-    fontWeight: 'bold',
-    color: '#5B059C',
-    marginBottom: '12px',
-    marginTop: '0'
-  },
-  siteTabs: {
     display: 'flex',
-    gap: '8px',
-    flexWrap: 'wrap'
+    gap: '10px',
+    flexWrap: 'wrap',
+    marginTop: '16px',
+    marginBottom: '16px'
   },
   siteTab: {
-    padding: '10px 16px',
+    padding: '10px 18px',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '999px',
     cursor: 'pointer',
     fontSize: '13px',
-    fontWeight: '500',
+    fontWeight: '600',
     transition: 'all 0.2s'
   },
   switchCount: {
     fontSize: '11px',
-    opacity: 0.8
+    opacity: 0.85
   },
-  canvasContainer: {
-    backgroundColor: 'white',
-    border: '1px solid #E8E8E8',
-    borderRadius: '8px',
-    padding: '15px'
+  mainLayout: {
+    display: 'grid',
+    gridTemplateColumns: '2fr 1fr',
+    gap: '20px',
+    alignItems: 'start'
   },
-  canvas: {
-    border: '1px solid #E8E8E8',
-    borderRadius: '6px',
-    backgroundColor: '#fafafa'
-  },
-  exportSection: {
-    backgroundColor: 'white',
-    border: '1px solid #E8E8E8',
-    borderRadius: '8px',
-    padding: '15px'
-  },
-  exportButtons: {
+  canvasPanel: {
     display: 'flex',
-    gap: '8px',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  exportBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
     flexWrap: 'wrap'
   },
+  exportLabel: {
+    fontSize: '13px',
+    fontWeight: '600',
+    color: '#5B059C'
+  },
   exportBtn: {
-    flex: 1,
-    minWidth: '150px',
-    padding: '10px 16px',
-    backgroundColor: '#5B059C',
+    padding: '9px 16px',
+    background: 'linear-gradient(135deg, #7519F9, #5B059C)',
     color: 'white',
     border: 'none',
-    borderRadius: '6px',
+    borderRadius: '8px',
     cursor: 'pointer',
     fontSize: '12px',
-    fontWeight: '500'
+    fontWeight: '600'
+  },
+  rightPanel: {
+    backgroundColor: '#faf8fd',
+    border: '1px solid #e9defa',
+    borderRadius: '10px',
+    padding: '18px',
+    overflow: 'auto',
+    maxHeight: '760px'
+  },
+  sectionTitle: {
+    fontSize: '15px',
+    fontWeight: 'bold',
+    color: '#5B059C',
+    marginTop: 0,
+    marginBottom: '12px'
+  },
+  detailsCard: {
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    padding: '16px',
+    border: '1px solid #e9defa'
+  },
+  detailRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '8px 0',
+    borderBottom: '1px solid #f3edfb'
+  },
+  label: {
+    fontWeight: 'bold',
+    color: '#5B059C',
+    fontSize: '12px'
+  },
+  value: {
+    color: '#333',
+    fontSize: '13px'
+  },
+  typeBadge: {
+    color: 'white',
+    padding: '4px 10px',
+    borderRadius: '999px',
+    fontSize: '11px',
+    fontWeight: '700'
+  },
+  subTitle: {
+    fontSize: '13px',
+    fontWeight: 'bold',
+    color: '#333',
+    margin: '16px 0 10px'
+  },
+  vlanList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  vlanItem: {
+    background: 'linear-gradient(135deg, #faf8fd, #f3edfb)',
+    border: '1px solid #e9defa',
+    borderRadius: '8px',
+    padding: '10px 12px'
+  },
+  vlanHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '4px'
+  },
+  vlanId: {
+    fontWeight: 'bold',
+    color: '#5B059C',
+    fontSize: '12px'
+  },
+  vlanNameTag: {
+    fontSize: '11px',
+    fontWeight: '600',
+    color: '#333',
+    background: '#fff',
+    border: '1px solid #e9defa',
+    borderRadius: '999px',
+    padding: '2px 8px'
+  },
+  vlanMeta: {
+    fontSize: '11px',
+    color: '#777'
   },
   emptyState: {
     textAlign: 'center',
@@ -582,79 +657,13 @@ const styles = {
     paddingTop: '40px'
   },
   emptyIcon: {
-    fontSize: '48px',
-    marginBottom: '16px'
+    fontSize: '42px',
+    marginBottom: '12px'
   },
-  featureList: {
-    textAlign: 'left',
-    display: 'inline-block',
-    fontSize: '13px',
-    color: '#666'
-  },
-  detailsCard: {
-    backgroundColor: 'white',
-    borderRadius: '6px',
-    padding: '16px',
-    border: '1px solid #E8E8E8'
-  },
-  detailRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingBottom: '12px',
-    borderBottom: '1px solid #f0f0f0'
-  },
-  label: {
-    fontWeight: 'bold',
-    color: '#5B059C',
-    minWidth: '120px'
-  },
-  value: {
-    color: '#333'
-  },
-  divider: {
-    margin: '16px 0',
-    borderTop: '1px solid #E8E8E8'
-  },
-  subTitle: {
-    fontSize: '13px',
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: '0'
-  },
-  vlanList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px'
-  },
-  vlanItem: {
-    backgroundColor: '#f9f9f9',
-    border: '1px solid #E8E8E8',
-    borderRadius: '6px',
-    padding: '12px',
-    fontSize: '12px'
-  },
-  vlanId: {
-    fontWeight: 'bold',
-    color: '#5B059C',
-    marginBottom: '4px'
-  },
-  vlanName: {
-    color: '#333',
-    fontSize: '11px'
-  },
-  vlanIsid: {
-    color: '#666',
-    fontSize: '11px'
-  },
-  vlanSubnet: {
-    color: '#999',
-    fontSize: '10px',
-    marginTop: '4px'
-  },
-  vlanIp: {
-    color: '#999',
-    fontSize: '10px'
+  pdfHolder: {
+    position: 'absolute',
+    left: '-99999px',
+    top: 0
   },
   navButtons: {
     display: 'flex',
@@ -672,17 +681,18 @@ const styles = {
     fontWeight: 'bold'
   },
   nextBtn: {
-    backgroundColor: '#5B059C',
+    background: 'linear-gradient(135deg, #7519F9, #5B059C)',
     color: 'white',
     border: 'none',
-    padding: '12px 24px',
+    padding: '12px 28px',
     borderRadius: '6px',
     cursor: 'pointer',
     fontWeight: 'bold'
   },
   tableCell: {
-    padding: '8px 12px',
-    border: '1px solid #ddd'
+    padding: '6px 10px',
+    border: '1px solid #ddd',
+    textAlign: 'left'
   }
 };
 

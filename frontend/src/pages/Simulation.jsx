@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-function Validation({ data, onNext, onBack }) {
+function Validation({ data, onNext, onBack, onReset }) {
   const [validationResults, setValidationResults] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -267,20 +267,25 @@ function Validation({ data, onNext, onBack }) {
         >
           ← Back to Visualization
         </button>
-        <button
-          onClick={() => onNext(data)}
-          style={{
-            padding: '0.75rem 1.5rem',
-            background: '#7519F9',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            cursor: 'pointer',
-            fontWeight: 'bold'
-          }}
-        >
-          → Complete & Download
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <span style={{ color: '#059669', fontWeight: 'bold', fontSize: '1rem' }}>
+            🎉 You're all done!
+          </span>
+          <button
+            onClick={onReset}
+            style={{
+              padding: '0.75rem 1.5rem',
+              background: '#7519F9',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              cursor: 'pointer',
+              fontWeight: 'bold'
+            }}
+          >
+            ↺ Start Over
+          </button>
+        </div>
       </div>
     </div>
   );
