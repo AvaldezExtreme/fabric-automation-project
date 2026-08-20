@@ -17,12 +17,6 @@ const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || 'localhost';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Serve frontend static files in production
-if (NODE_ENV === 'production') {
-  const frontendDist = join(__dirname, '../frontend/dist');
-  app.use(express.static(frontendDist));
-}
-
 // ===== SECURITY MIDDLEWARE =====
 // Helmet for security headers
 app.use(helmet({
