@@ -1,6 +1,6 @@
 // ============================================
 // Template & Sample Data Routes
-// Version: V2608206
+// Version: V2608207
 // Purpose: Generate the fillable Excel template in-app. Matches Carlos's
 //          proven column layout (A-T) with his auto-population formulas:
 //          I-SID, I-SID Name, SwitchName, SiteID compute themselves.
@@ -13,7 +13,7 @@ import { extractNetworkData, buildTopology } from '../services/excelParser.js';
 
 const router = express.Router();
 
-const TEMPLATE_VERSION = 'V2608206';
+const TEMPLATE_VERSION = 'V2608207';
 const BANNER_ROW = 6;        // visual separator between examples and data entry
 const FIRST_DATA_ROW = 7;    // customers start typing here
 const DATA_ROWS = 1000; // formulas + unlocked input cells prepared through this row
@@ -81,7 +81,7 @@ router.get('/', async (req, res) => {
       ['', '   • MgmtVLAN (Q) — finds the VLAN on this site whose Name contains "mgmt" (e.g. Netmgmt). You can type over it if needed.'],
       ['', ''],
       ['', 'HOW TO FILL IT OUT'],
-      ['', '1. The GRAY rows (2-5) are a working example — try editing them and watch the green columns react. The ORANGE banner (row 6) marks where the example ends.'],
+      ['', '1. The GRAY rows (2-5) are a working example — try editing them and watch the green columns react. The ORANGE banner (row 6) marks where the example ends. (The example\'s Location and DistrictName are locked: they let FACE recognize and auto-ignore example rows if you forget to delete them.)'],
       ['', '2. Enter your real data STARTING AT ROW 7, below the orange banner. One row per switch: Location, Service Application (short site code like LHS), Layer (12), Site (a number), Edge Vlans, Name, Subnet, DeviceType, DefaultGateway, SwitchType (L2/L3), Closet.'],
       ['', '3. Watch SwitchName, I-SID, I-SID Name, and MgmtVLAN build themselves as you type.'],
       ['', '4. Extra VLANs for a site go on their own rows: fill Service Application, Layer, Site, Edge Vlans, Name, Subnet, DeviceType — leave Closet/SwitchType blank (no switch on that row). If a VLAN row is missing something the formulas need, the empty cells turn RED.'],
@@ -235,10 +235,15 @@ router.get('/', async (req, res) => {
     });
 
     // Unlock input cells (everything else stays locked = formulas protected;
-    // the banner row stays locked so it can't be typed over)
+    // the banner row stays locked so it can't be typed over).
+    // Exception: Location (A) and DistrictName (L) on the example rows stay
+    // LOCKED — they are the fingerprint the upload uses to auto-ignore
+    // leftover example rows, so they must not be editable.
     for (let r = 2; r <= DATA_ROWS; r++) {
       if (r === BANNER_ROW) continue;
+      const isExampleRow = r < BANNER_ROW;
       INPUT_COLS.forEach(col => {
+        if (isExampleRow && (col === 'A' || col === 'L')) return;
         ws.getCell(`${col}${r}`).protection = { locked: false };
       });
     }

@@ -1,5 +1,5 @@
 import express from 'express';
-import { parseExcelBuffer, extractNetworkData, buildTopology, collectRowIssues } from '../services/excelParser.js';
+import { parseExcelBuffer, extractNetworkData, buildTopology, collectRowIssues, stripTemplateExampleRows } from '../services/excelParser.js';
 
 const router = express.Router();
 
@@ -28,8 +28,16 @@ router.post('/', async (req, res) => {
     const buffer = Buffer.from(data, 'base64');
     const excelSheets = parseExcelBuffer(buffer);
 
+    // Auto-ignore leftover example rows from the FACE template so they
+    // never pollute real configs (must run BEFORE validation and parsing)
+    const exampleRowsIgnored = stripTemplateExampleRows(excelSheets);
+
     // Row-level data quality checks (advisory - never blocks)
     const issues = collectRowIssues(excelSheets);
+
+    if (exampleRowsIgnored > 0) {
+      issues.unshift(`ℹ️ ${exampleRowsIgnored} example row${exampleRowsIgnored > 1 ? 's' : ''} from the template ${exampleRowsIgnored > 1 ? 'were' : 'was'} detected and automatically ignored`);
+    }
 
     const switches = extractNetworkData(excelSheets);
 

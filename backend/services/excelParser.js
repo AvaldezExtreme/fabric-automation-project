@@ -29,6 +29,30 @@ export const parseExcelBuffer = (buffer) => {
   }
 };
 
+// Detect leftover example rows from the FACE template and blank them out
+// so they never reach parsing or validation. Fingerprint: the template's
+// example rows carry Location "LINCOLN HIGH SCHOOL" + DistrictName
+// "DEMO DISTRICT" in locked cells, so no real customer data can match.
+// Rows are replaced with {} (not removed) so Excel row numbers stay
+// accurate in issue messages. Returns how many rows were ignored.
+export const stripTemplateExampleRows = (excelSheets) => {
+  let stripped = 0;
+
+  for (const [sheetName, rows] of Object.entries(excelSheets)) {
+    excelSheets[sheetName] = rows.map(row => {
+      const location = row['Location']?.toString().trim().toUpperCase();
+      const district = row['DistrictName']?.toString().trim().toUpperCase();
+      if (location === 'LINCOLN HIGH SCHOOL' && district === 'DEMO DISTRICT') {
+        stripped++;
+        return {};
+      }
+      return row;
+    });
+  }
+
+  return stripped;
+};
+
 // Scan raw rows and report precise, human-readable data problems.
 // Row numbers are Excel row numbers (header is row 1, data starts at row 2).
 export const collectRowIssues = (excelSheets) => {
