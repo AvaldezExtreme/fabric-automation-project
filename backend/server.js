@@ -9,6 +9,7 @@ import uploadRoutes from './routes/upload.js';
 import generateRoutes from './routes/generate.js';
 import authRoutes from './routes/auth.js';
 import validateRoutes from './routes/validate.js';
+import templateRoutes from './routes/template.js';
 import { authMiddleware } from './middleware/authMiddleware.js';
 
 const app = express();
@@ -111,6 +112,7 @@ app.get('/api/validate/status', (req, res) => {
 app.use('/api/upload', authMiddleware, uploadRoutes);
 app.use('/api/generate', authMiddleware, generateRoutes);
 app.use('/api/validate', authMiddleware, validateRoutes);
+app.use('/api/template', authMiddleware, templateRoutes);
 
 // ===== SPA FALLBACK (AFTER ALL API ROUTES) =====
 if (NODE_ENV === 'production') {
@@ -160,7 +162,7 @@ const server = app.listen(PORT, () => {
 ╔══════════════════════════════════════════════════════════════╗
 ║     Network Configuration Automation Tool - Backend v2       ║
 ╠══════════════════════════════════════════════════════════════╣
-║ Version:          V2608172                                   ║
+║ Version:          V2608201                                   ║
 ║ Status:           ✓ Running                                   ║
 ║ Listening on:     port ${PORT} (all interfaces, IPv4+IPv6)   ║
 ║ Environment:      ${NODE_ENV}                                 ║

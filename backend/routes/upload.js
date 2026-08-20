@@ -1,5 +1,5 @@
 import express from 'express';
-import { parseExcelBuffer, extractNetworkData, buildTopology } from '../services/excelParser.js';
+import { parseExcelBuffer, extractNetworkData, buildTopology, collectRowIssues } from '../services/excelParser.js';
 
 const router = express.Router();
 
@@ -28,16 +28,23 @@ router.post('/', async (req, res) => {
     const buffer = Buffer.from(data, 'base64');
     const excelSheets = parseExcelBuffer(buffer);
 
+    // Row-level data quality checks (advisory - never blocks)
+    const issues = collectRowIssues(excelSheets);
+
     const switches = extractNetworkData(excelSheets);
 
     if (switches.length === 0) {
-      return res.status(400).json({ error: 'No switch data found in Excel file' });
+      return res.status(400).json({
+        error: 'No switch data found. Check that your file uses the FACE template columns (SwitchName, SwitchType, SiteID, Edge Vlans, I-SID...) — you can download a fresh template on the Upload page.',
+        issues
+      });
     }
 
     const topology = buildTopology(switches);
 
     res.json({
       success: true,
+      issues,
       data: {
         switches,
         topology,

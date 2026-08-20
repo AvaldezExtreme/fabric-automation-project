@@ -29,6 +29,73 @@ export const parseExcelBuffer = (buffer) => {
   }
 };
 
+// Scan raw rows and report precise, human-readable data problems.
+// Row numbers are Excel row numbers (header is row 1, data starts at row 2).
+export const collectRowIssues = (excelSheets) => {
+  const issues = [];
+  const cidrPattern = /^\d{1,3}(\.\d{1,3}){3}\/\d{1,2}$/;
+  const ipPattern = /^\d{1,3}(\.\d{1,3}){3}$/;
+  const seenIsids = new Map(); // isid -> first "sheet row" reference
+
+  for (const [sheetName, rows] of Object.entries(excelSheets)) {
+    rows.forEach((row, index) => {
+      const excelRow = index + 2;
+      const where = `${sheetName} row ${excelRow}`;
+
+      const edgeVlan = row['Edge Vlans'];
+      const vlanName = row['Name']?.toString().trim();
+      const subnet = row['Subnet']?.toString().trim();
+      const isid = row['Layer 2 VSN I-SID'] || row['Layer 3 VSN I-SID (VRF)'];
+      const switchName = row['SwitchName']?.toString().trim();
+      const switchType = row['SwitchType']?.toString().trim().toUpperCase();
+      const gateway = row['DefaultGateway']?.toString().trim();
+
+      // VLAN row checks
+      if (edgeVlan) {
+        const vlanId = parseInt(edgeVlan);
+        if (isNaN(vlanId) || vlanId < 1 || vlanId > 4094) {
+          issues.push(`${where}: VLAN ID "${edgeVlan}" is not valid (must be 1-4094)`);
+        }
+        if (!vlanName) {
+          issues.push(`${where}: VLAN ${edgeVlan} skipped — missing Name`);
+        }
+        if (!isid) {
+          issues.push(`${where}: VLAN ${edgeVlan} skipped — missing I-SID`);
+        } else {
+          const isidNum = parseInt(isid);
+          if (isNaN(isidNum) || isidNum < 4096 || isidNum > 16777215) {
+            issues.push(`${where}: I-SID "${isid}" is out of range (must be 4096-16777215)`);
+          } else if (seenIsids.has(isidNum)) {
+            issues.push(`${where}: I-SID ${isidNum} already used at ${seenIsids.get(isidNum)} — I-SIDs must be unique across the fabric`);
+          } else {
+            seenIsids.set(isidNum, where);
+          }
+        }
+        if (subnet && !cidrPattern.test(subnet)) {
+          issues.push(`${where}: Subnet "${subnet}" is not CIDR format (e.g. 10.1.8.0/24)`);
+        }
+      }
+
+      // Switch row checks
+      if (switchName && !switchName.includes('SwitchName')) {
+        if (!switchType) {
+          issues.push(`${where}: Switch "${switchName}" is missing SwitchType (L2 or L3)`);
+        } else if (!['L2', 'L3'].includes(switchType)) {
+          issues.push(`${where}: Switch "${switchName}" has SwitchType "${switchType}" — must be L2 or L3`);
+        }
+        if (!row['SiteID']) {
+          issues.push(`${where}: Switch "${switchName}" is missing SiteID`);
+        }
+        if (gateway && !ipPattern.test(gateway)) {
+          issues.push(`${where}: DefaultGateway "${gateway}" is not a valid IP address`);
+        }
+      }
+    });
+  }
+
+  return issues;
+};
+
 const normalizeDeviceType = (deviceType) => {
   if (!deviceType) return null;
   
