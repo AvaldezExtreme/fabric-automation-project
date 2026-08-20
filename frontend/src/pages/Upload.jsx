@@ -54,11 +54,16 @@ function Upload({ onNext, onError }) {
       });
       if (!response.ok) throw new Error('Template download failed');
 
+      // Use the server's versioned filename (e.g. FACE-Fabric-Template-V2608204.xlsx)
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="?([^";]+)"?/i);
+      const filename = match ? match[1] : 'FACE-Fabric-Template.xlsx';
+
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'FACE-Fabric-Template.xlsx';
+      a.download = filename;
       document.body.appendChild(a);
       a.click();
       a.remove();

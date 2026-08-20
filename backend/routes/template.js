@@ -1,6 +1,6 @@
 // ============================================
 // Template & Sample Data Routes
-// Version: V2608203
+// Version: V2608204
 // Purpose: Generate the fillable Excel template in-app. Matches Carlos's
 //          proven column layout (A-T) with his auto-population formulas:
 //          I-SID, I-SID Name, SwitchName, SiteID compute themselves.
@@ -13,7 +13,7 @@ import { extractNetworkData, buildTopology } from '../services/excelParser.js';
 
 const router = express.Router();
 
-const TEMPLATE_VERSION = 'V2608203';
+const TEMPLATE_VERSION = 'V2608204';
 const DATA_ROWS = 1000; // formulas + unlocked input cells prepared through this row
 
 // Column layout A-T — matches the original FabricVlanIsidTemplate exactly.
@@ -126,7 +126,8 @@ router.get('/', async (req, res) => {
     });
     ws.getRow(1).height = 22;
 
-    // Example rows 2-5 (plain values, gray italic)
+    // Example rows 2-5 (input cells plain, gray italic; auto cells get live
+    // formulas below so the example itself demonstrates the auto-fill)
     EXAMPLE_ROWS.forEach(rowData => {
       const row = ws.addRow(rowData);
       row.eachCell({ includeEmpty: false }, cell => {
@@ -135,22 +136,37 @@ router.get('/', async (req, res) => {
       });
     });
 
-    // Auto-population formulas for rows 6..DATA_ROWS. Taken from the latest
-    // FabricVlanIsidTemplate, with two adaptations for a multi-site sheet:
-    // SwitchName counts closets per-site (COUNTIFS), and MgmtVLAN looks up
-    // the site's own *mgmt* VLAN instead of a fixed cell.
-    const firstFormulaRow = EXAMPLE_ROWS.length + 2;
-    for (let r = firstFormulaRow; r <= DATA_ROWS; r++) {
-      ws.getCell(`T${r}`).value = { formula: `IF(E${r}="","",TEXT(E${r},"0000"))` };
-      ws.getCell(`I${r}`).value = { formula: `IF(OR(C${r}="",D${r}="",E${r}=""),"",LEFT(C${r},2)&LEFT(D${r},2)&LEFT(T${r},4))` };
-      ws.getCell(`J${r}`).value = { formula: `IF(AND(B${r}<>"",F${r}<>""),B${r}&"-"&F${r},"")` };
+    // Auto-population formulas for ALL data rows (2..DATA_ROWS). Taken from
+    // the latest FabricVlanIsidTemplate, with two adaptations for a
+    // multi-site sheet: SwitchName counts closets per-site (COUNTIFS), and
+    // MgmtVLAN looks up the site's own *mgmt* VLAN instead of a fixed cell.
+    // Example rows (2-5) get {formula, result}: the cached result lets a
+    // freshly downloaded file parse, while edits recalc live in Excel.
+    const colIndex = { I: 8, J: 9, N: 13, P: 15, Q: 16, T: 19 }; // 0-based into EXAMPLE_ROWS
+    for (let r = 2; r <= DATA_ROWS; r++) {
+      const example = r - 2 < EXAMPLE_ROWS.length ? EXAMPLE_ROWS[r - 2] : null;
+      const setCell = (col, formula) => {
+        const cell = ws.getCell(`${col}${r}`);
+        if (example) {
+          const result = example[colIndex[col]];
+          cell.value = result === '' || result === undefined
+            ? { formula, result: '' }
+            : { formula, result };
+        } else {
+          cell.value = { formula };
+        }
+      };
+
+      setCell('T', `IF(E${r}="","",TEXT(E${r},"0000"))`);
+      setCell('I', `IF(OR(C${r}="",D${r}="",E${r}=""),"",LEFT(C${r},2)&LEFT(D${r},2)&LEFT(T${r},4))`);
+      setCell('J', `IF(AND(B${r}<>"",F${r}<>""),B${r}&"-"&F${r},"")`);
       // Latest naming logic: closets may contain spaces (become dashes) and
       // won't get double-prefixed if they already start with the site code
-      ws.getCell(`N${r}`).value = { formula: `IF($S${r}="","",SUBSTITUTE(IF(LEFT($S${r},LEN($B${r}))=$B${r},$S${r},$B${r}&" "&$S${r})," ","-")&"-"&COUNTIFS($S$2:S${r},S${r},$D$2:D${r},D${r}))` };
-      ws.getCell(`P${r}`).value = { formula: `IF(D${r}="","",D${r})` };
+      setCell('N', `IF($S${r}="","",SUBSTITUTE(IF(LEFT($S${r},LEN($B${r}))=$B${r},$S${r},$B${r}&" "&$S${r})," ","-")&"-"&COUNTIFS($S$2:S${r},S${r},$D$2:D${r},D${r}))`);
+      setCell('P', `IF(D${r}="","",D${r})`);
       // MgmtVLAN: auto-find this site's VLAN whose Name contains "mgmt".
       // Lives in an UNLOCKED column so it can simply be typed over.
-      ws.getCell(`Q${r}`).value = { formula: `IF(D${r}="","",IFERROR(INDEX($E$2:$E$${DATA_ROWS},MATCH(1,INDEX(($D$2:$D$${DATA_ROWS}=D${r})*(ISNUMBER(SEARCH("mgmt",$F$2:$F$${DATA_ROWS}))),0),0)),""))` };
+      setCell('Q', `IF(D${r}="","",IFERROR(INDEX($E$2:$E$${DATA_ROWS},MATCH(1,INDEX(($D$2:$D$${DATA_ROWS}=D${r})*(ISNUMBER(SEARCH("mgmt",$F$2:$F$${DATA_ROWS}))),0),0)),""))`);
     }
 
     // Hide the helper column (works invisibly)
