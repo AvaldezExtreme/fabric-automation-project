@@ -3,8 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import uploadRoutes from './routes/upload.js';
 import generateRoutes from './routes/generate.js';
 import authRoutes from './routes/auth.js';
@@ -14,17 +14,9 @@ import { authMiddleware } from './middleware/authMiddleware.js';
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Serve frontend static files in production
-if (NODE_ENV === 'production') {
-  const frontendDist = join(__dirname, '../frontend/dist');
-  app.use(express.static(frontendDist));
-}
-
-// ===== SECURITY MIDDLEWARE =====
-// Helmet for security headers
+// ===== SECURITY =====
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -36,145 +28,115 @@ app.use(helmet({
   }
 }));
 
-// Rate limiting
+// ===== RATE LIMITING =====
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 min default
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'),
-  message: 'Too many requests from this IP, please try again later.',
-  standardHeaders: true, // Return rate limit info in RateLimit-* headers
-  legacyHeaders: false // Disable X-RateLimit-* headers
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests'
 });
 
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per windowMs
-  message: 'Too many login attempts, please try again later.',
-  skipSuccessfulRequests: true // Don't count successful requests
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  skipSuccessfulRequests: true
 });
 
 app.use(limiter);
 
-// ===== CORS CONFIGURATION =====
-const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+// ===== CORS =====
 app.use(cors({
-  origin: corsOrigin,
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// ===== BODY PARSING MIDDLEWARE =====
-const maxFileSize = process.env.MAX_FILE_SIZE || '10485760'; // 10MB default
-app.use(express.json({ limit: maxFileSize }));
-app.use(express.urlencoded({ limit: maxFileSize, extended: true }));
+// ===== BODY PARSING =====
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// ===== REQUEST LOGGING MIDDLEWARE =====
+// ===== LOGGING =====
 app.use((req, res, next) => {
-  const timestamp = new Date().toISOString();
-  const method = req.method;
-  const path = req.path;
-  const ip = req.ip;
-
-  // Log request (no sensitive data)
-  if (NODE_ENV !== 'production' || path.includes('/api/')) {
-    console.log(`[${timestamp}] ${method} ${path} - ${ip}`);
+  if (NODE_ENV === 'development' || req.path.includes('/api/')) {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
   }
-
   next();
 });
 
-// ===== PUBLIC ROUTES (NO AUTH REQUIRED) =====
-app.use('/api/auth', loginLimiter, authRoutes);
-
-// Health check (public)
+// ===== HEALTH CHECK =====
 app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: NODE_ENV
-  });
+  res.json({ status: 'ok', environment: NODE_ENV });
 });
 
-// Validator status (public)
+// ===== PUBLIC ROUTES =====
+app.use('/api/auth', loginLimiter, authRoutes);
+
 app.get('/api/validate/status', (req, res) => {
   res.json({
     status: 'ready',
     validator: 'Fabric Configuration Validator',
-    version: 'V2608173',
-    timestamp: new Date().toISOString()
+    version: 'V2608173'
   });
 });
 
-// ===== PROTECTED ROUTES (AUTH REQUIRED) =====
+// ===== PROTECTED ROUTES =====
 app.use('/api/upload', authMiddleware, uploadRoutes);
 app.use('/api/generate', authMiddleware, generateRoutes);
 app.use('/api/validate', authMiddleware, validateRoutes);
 
-// ===== SPA FALLBACK (AFTER ALL API ROUTES) =====
+// ===== STATIC FILES & SPA FALLBACK =====
 if (NODE_ENV === 'production') {
-  const frontendDist = join(__dirname, '../frontend/dist');
-  app.get('*', (req, res, next) => {
-    if (!req.path.startsWith('/api') && !req.path.includes('.')) {
-      res.sendFile(join(frontendDist, 'index.html'), (err) => {
-        if (err) next(err);
-      });
-    } else {
-      next();
-    }
+  const frontendPath = join(__dirname, '../frontend/dist');
+
+  // Serve static files
+  app.use(express.static(frontendPath, {
+    maxAge: '1d',
+    etag: false
+  }));
+
+  // SPA fallback: serve index.html for any route not starting with /api
+  app.get('*', (req, res) => {
+    res.sendFile(join(frontendPath, 'index.html'), (err) => {
+      if (err) {
+        res.status(500).json({ error: 'Could not load app' });
+      }
+    });
   });
 }
 
-// ===== ERROR HANDLING MIDDLEWARE =====
+// ===== ERROR HANDLING =====
 app.use((err, req, res, next) => {
-  const timestamp = new Date().toISOString();
-  const errorId = Math.random().toString(36).substring(7);
-
-  // Log detailed error (server-side only)
-  console.error(`[${timestamp}] Error ID: ${errorId}`, err);
-
-  // Generic error response to client (no stack traces)
+  console.error(`Error: ${err.message}`);
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-    code: err.code || 'INTERNAL_ERROR',
-    errorId, // For support/debugging without exposing details
-    timestamp
+    error: err.message || 'Internal server error'
   });
 });
 
-// 404 handler
+// ===== 404 =====
 app.use((req, res) => {
-  res.status(404).json({
-    error: 'Not found',
-    code: 'NOT_FOUND',
-    path: req.path,
-    timestamp: new Date().toISOString()
-  });
+  res.status(404).json({ error: 'Not found' });
 });
 
 // ===== START SERVER =====
-const server = app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║     Network Configuration Automation Tool - Backend v2       ║
 ╠══════════════════════════════════════════════════════════════╣
-║ Version:          V2608172                                   ║
 ║ Status:           ✓ Running                                   ║
-║ API URL:          http://${HOST}:${PORT}                     ║
+║ Port:             ${PORT}                                             ║
 ║ Environment:      ${NODE_ENV}                                 ║
-║ Authentication:   ✓ Enabled (JWT)                            ║
-║ Security:         ✓ Helmet + Rate Limiting                   ║
-║ CORS Origin:      ${corsOrigin}                              ║
+║ CORS Origin:      ${process.env.CORS_ORIGIN || 'http://localhost:3000'}║
 ╚══════════════════════════════════════════════════════════════╝
   `);
-
-  if (NODE_ENV === 'development') {
-    console.log('📝 API Documentation: http://localhost:3001/api/docs (coming soon)');
-    console.log('🔐 Login: POST http://localhost:3001/api/auth/login');
-    console.log('   Credentials defined in .env VALID_USERS');
-  }
 });
 
 server.on('error', (err) => {
-  console.error('Server error:', err);
+  console.error('Server failed to start:', err.message);
   process.exit(1);
+});
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  server.close(() => process.exit(0));
 });
