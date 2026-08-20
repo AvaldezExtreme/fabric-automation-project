@@ -24,7 +24,7 @@ function Validate({ data, onNext, onBack }) {
     try {
       console.log('Running Fabric configuration validation...');
 
-      const response = await fetch('http://127.0.0.1:3001/api/validate/fabric', {
+      const response = await fetch('/api/validate/fabric', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

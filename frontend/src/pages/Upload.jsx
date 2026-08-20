@@ -58,7 +58,7 @@ function Upload({ onNext, onError }) {
           console.log('Uploading file:', file.name);
 
           // Send with JWT token from tokenService
-          const response = await fetch('http://127.0.0.1:3001/api/upload', {
+          const response = await fetch('/api/upload', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',

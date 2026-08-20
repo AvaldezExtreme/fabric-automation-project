@@ -7,8 +7,9 @@
 import axios from 'axios';
 import tokenService from './tokenService.js';
 
-// Use relative path for production (same origin), or VITE_API_URL for local dev
-const API_BASE_URL = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:3001' : '');
+// Always use relative paths: production serves frontend+API from the same
+// origin, and the Vite dev server proxies /api to the backend (vite.config.js).
+const API_BASE_URL = '';
 
 // Create axios instance
 const apiClient = axios.create({

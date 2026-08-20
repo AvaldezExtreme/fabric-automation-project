@@ -134,14 +134,6 @@ function Login({ onLoginSuccess }) {
               )}
             </button>
 
-            {/* Demo Credentials Notice */}
-            <div className="auth-demo-notice">
-              <strong>Development Credentials:</strong>
-              <div style={{ fontSize: '0.9em', marginTop: '5px' }}>
-                • Username: <code>admin</code> | Password: <code>admin123</code><br/>
-                • Username: <code>user</code> | Password: <code>user123</code>
-              </div>
-            </div>
           </form>
 
           {/* Footer */}

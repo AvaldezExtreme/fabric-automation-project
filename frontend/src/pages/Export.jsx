@@ -71,7 +71,7 @@ function Export({ data, onNext, onBack }) {
     try {
       console.log('🔄 Fetching configurations...');
       
-      const response = await fetch('http://127.0.0.1:3001/api/generate/all', {
+      const response = await fetch('/api/generate/all', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
