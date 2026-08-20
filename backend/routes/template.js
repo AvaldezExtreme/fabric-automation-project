@@ -13,7 +13,9 @@ import { extractNetworkData, buildTopology } from '../services/excelParser.js';
 
 const router = express.Router();
 
-const TEMPLATE_VERSION = 'V2608204';
+const TEMPLATE_VERSION = 'V2608205';
+const BANNER_ROW = 6;        // visual separator between examples and data entry
+const FIRST_DATA_ROW = 7;    // customers start typing here
 const DATA_ROWS = 1000; // formulas + unlocked input cells prepared through this row
 
 // Column layout A-T — matches the original FabricVlanIsidTemplate exactly.
@@ -78,12 +80,13 @@ router.get('/', async (req, res) => {
       ['', '   • SiteID (P) — mirrors the Site column'],
       ['', '   • MgmtVLAN (Q) — finds the VLAN on this site whose Name contains "mgmt" (e.g. Netmgmt). You can type over it if needed.'],
       ['', ''],
-      ['', 'HOW TO FILL IT OUT (start at row 6, below the gray example rows)'],
-      ['', '1. One row per switch. Fill: Location, Service Application (short site code like LHS), Layer (12), Site (a number), Edge Vlans, Name, Subnet, DeviceType, DefaultGateway, SwitchType (L2/L3), MgmtVLAN, Closet.'],
-      ['', '2. Watch SwitchName and I-SID build themselves as you type.'],
-      ['', '3. Extra VLANs for a site go on their own rows: fill Service Application, Layer, Site, Edge Vlans, Name, Subnet, DeviceType — leave Closet/SwitchType blank (no switch on that row).'],
-      ['', '4. When your data is in, DELETE the gray example rows: select rows 2-5, right-click, Delete Rows.'],
-      ['', '5. Save and upload at the FACE portal.'],
+      ['', 'HOW TO FILL IT OUT'],
+      ['', '1. The GRAY rows (2-5) are a working example — try editing them and watch the green columns react. The ORANGE banner (row 6) marks where the example ends.'],
+      ['', '2. Enter your real data STARTING AT ROW 7, below the orange banner. One row per switch: Location, Service Application (short site code like LHS), Layer (12), Site (a number), Edge Vlans, Name, Subnet, DeviceType, DefaultGateway, SwitchType (L2/L3), Closet.'],
+      ['', '3. Watch SwitchName, I-SID, I-SID Name, and MgmtVLAN build themselves as you type.'],
+      ['', '4. Extra VLANs for a site go on their own rows: fill Service Application, Layer, Site, Edge Vlans, Name, Subnet, DeviceType — leave Closet/SwitchType blank (no switch on that row).'],
+      ['', '5. When your data is in, DELETE the example and banner: select rows 2-6, right-click, Delete Rows.'],
+      ['', '6. Save and upload at the FACE portal.'],
       ['', ''],
       ['', 'COLUMN NOTES'],
       ['', 'Layer — 12 for Layer 2 VSN (most common), 13 for Layer 3 VSN.'],
@@ -102,9 +105,12 @@ router.get('/', async (req, res) => {
     ];
     lines.forEach(l => info.addRow(l));
     info.getRow(2).font = { bold: true, size: 16, color: { argb: 'FF5B059C' } };
-    info.getRow(4).font = { bold: true, size: 12, color: { argb: 'FF00926B' } };
-    info.getRow(11).font = { bold: true, size: 12 };
-    info.getRow(18).font = { bold: true, size: 12 };
+    // Bold the section headers wherever they land in the lines array
+    lines.forEach((l, idx) => {
+      if (['THE MAGIC', 'HOW TO FILL', 'COLUMN NOTES'].some(h => (l[1] || '').startsWith(h))) {
+        info.getRow(idx + 1).font = { bold: true, size: 12, color: { argb: l[1].startsWith('THE MAGIC') ? 'FF00926B' : 'FF333333' } };
+      }
+    });
 
     // --- Data sheet ---
     const ws = wb.addWorksheet('Fabric Data', {
@@ -136,6 +142,17 @@ router.get('/', async (req, res) => {
       });
     });
 
+    // Banner row: unmissable "start here" separator between the example and
+    // the customer's data. Contains no switch/VLAN fields, so the parser
+    // ignores it entirely.
+    ws.mergeCells(`A${BANNER_ROW}:S${BANNER_ROW}`);
+    const banner = ws.getCell(`A${BANNER_ROW}`);
+    banner.value = '▲ EXAMPLE (gray) — edit it to see the auto-fill work   |   ▼ ENTER YOUR REAL DATA BELOW, STARTING AT ROW 7 ▼   |   Done? Delete rows 2-6';
+    banner.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFF9900' } };
+    banner.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+    banner.alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getRow(BANNER_ROW).height = 24;
+
     // Auto-population formulas for ALL data rows (2..DATA_ROWS). Taken from
     // the latest FabricVlanIsidTemplate, with two adaptations for a
     // multi-site sheet: SwitchName counts closets per-site (COUNTIFS), and
@@ -144,6 +161,7 @@ router.get('/', async (req, res) => {
     // freshly downloaded file parse, while edits recalc live in Excel.
     const colIndex = { I: 8, J: 9, N: 13, P: 15, Q: 16, T: 19 }; // 0-based into EXAMPLE_ROWS
     for (let r = 2; r <= DATA_ROWS; r++) {
+      if (r === BANNER_ROW) continue; // separator row carries no formulas
       const example = r - 2 < EXAMPLE_ROWS.length ? EXAMPLE_ROWS[r - 2] : null;
       const setCell = (col, formula) => {
         const cell = ws.getCell(`${col}${r}`);
@@ -194,8 +212,10 @@ router.get('/', async (req, res) => {
       error: 'VLAN ID must be a whole number between 1 and 4094.'
     });
 
-    // Unlock input cells (everything else stays locked = formulas protected)
+    // Unlock input cells (everything else stays locked = formulas protected;
+    // the banner row stays locked so it can't be typed over)
     for (let r = 2; r <= DATA_ROWS; r++) {
+      if (r === BANNER_ROW) continue;
       INPUT_COLS.forEach(col => {
         ws.getCell(`${col}${r}`).protection = { locked: false };
       });
