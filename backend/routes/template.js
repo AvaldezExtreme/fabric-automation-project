@@ -1,6 +1,6 @@
 // ============================================
 // Template & Sample Data Routes
-// Version: V2608202
+// Version: V2608203
 // Purpose: Generate the fillable Excel template in-app. Matches Carlos's
 //          proven column layout (A-T) with his auto-population formulas:
 //          I-SID, I-SID Name, SwitchName, SiteID compute themselves.
@@ -13,7 +13,7 @@ import { extractNetworkData, buildTopology } from '../services/excelParser.js';
 
 const router = express.Router();
 
-const TEMPLATE_VERSION = 'V2608202';
+const TEMPLATE_VERSION = 'V2608203';
 const DATA_ROWS = 1000; // formulas + unlocked input cells prepared through this row
 
 // Column layout A-T — matches the original FabricVlanIsidTemplate exactly.
@@ -74,8 +74,9 @@ router.get('/', async (req, res) => {
       ['', 'These columns are AUTO-CALCULATED and locked — do not type in them:'],
       ['', '   • Layer 2 VSN I-SID (I) — builds itself from Layer + Site + VLAN (e.g. 12 + 10 + 0008 = 12100008)'],
       ['', '   • I-SID Name (J) — Service Application + VLAN Name (e.g. LHS-Netmgmt)'],
-      ['', '   • SwitchName (N) — Service Application + Closet + auto-number (e.g. LHS-MDF1-1; type MDF1 again on another row and you get LHS-MDF1-2)'],
+      ['', '   • SwitchName (N) — Service Application + Closet + auto-number (e.g. LHS-MDF1-1; type MDF1 again on another row and you get LHS-MDF1-2). Closets with spaces work too: "MDF A115" becomes LHS-MDF-A115-1.'],
       ['', '   • SiteID (P) — mirrors the Site column'],
+      ['', '   • MgmtVLAN (Q) — finds the VLAN on this site whose Name contains "mgmt" (e.g. Netmgmt). You can type over it if needed.'],
       ['', ''],
       ['', 'HOW TO FILL IT OUT (start at row 6, below the gray example rows)'],
       ['', '1. One row per switch. Fill: Location, Service Application (short site code like LHS), Layer (12), Site (a number), Edge Vlans, Name, Subnet, DeviceType, DefaultGateway, SwitchType (L2/L3), MgmtVLAN, Closet.'],
@@ -134,15 +135,22 @@ router.get('/', async (req, res) => {
       });
     });
 
-    // Auto-population formulas for rows 6..DATA_ROWS (Carlos's formulas,
-    // SwitchName upgraded to COUNTIFS so closet numbering is per-site)
+    // Auto-population formulas for rows 6..DATA_ROWS. Taken from the latest
+    // FabricVlanIsidTemplate, with two adaptations for a multi-site sheet:
+    // SwitchName counts closets per-site (COUNTIFS), and MgmtVLAN looks up
+    // the site's own *mgmt* VLAN instead of a fixed cell.
     const firstFormulaRow = EXAMPLE_ROWS.length + 2;
     for (let r = firstFormulaRow; r <= DATA_ROWS; r++) {
       ws.getCell(`T${r}`).value = { formula: `IF(E${r}="","",TEXT(E${r},"0000"))` };
       ws.getCell(`I${r}`).value = { formula: `IF(OR(C${r}="",D${r}="",E${r}=""),"",LEFT(C${r},2)&LEFT(D${r},2)&LEFT(T${r},4))` };
-      ws.getCell(`J${r}`).value = { formula: `IF(OR(B${r}="",F${r}=""),"",B${r}&"-"&F${r})` };
-      ws.getCell(`N${r}`).value = { formula: `IF(OR(S${r}="",B${r}=""),"",B${r}&"-"&S${r}&"-"&COUNTIFS($S$2:S${r},S${r},$D$2:D${r},D${r}))` };
+      ws.getCell(`J${r}`).value = { formula: `IF(AND(B${r}<>"",F${r}<>""),B${r}&"-"&F${r},"")` };
+      // Latest naming logic: closets may contain spaces (become dashes) and
+      // won't get double-prefixed if they already start with the site code
+      ws.getCell(`N${r}`).value = { formula: `IF($S${r}="","",SUBSTITUTE(IF(LEFT($S${r},LEN($B${r}))=$B${r},$S${r},$B${r}&" "&$S${r})," ","-")&"-"&COUNTIFS($S$2:S${r},S${r},$D$2:D${r},D${r}))` };
       ws.getCell(`P${r}`).value = { formula: `IF(D${r}="","",D${r})` };
+      // MgmtVLAN: auto-find this site's VLAN whose Name contains "mgmt".
+      // Lives in an UNLOCKED column so it can simply be typed over.
+      ws.getCell(`Q${r}`).value = { formula: `IF(D${r}="","",IFERROR(INDEX($E$2:$E$${DATA_ROWS},MATCH(1,INDEX(($D$2:$D$${DATA_ROWS}=D${r})*(ISNUMBER(SEARCH("mgmt",$F$2:$F$${DATA_ROWS}))),0),0)),""))` };
     }
 
     // Hide the helper column (works invisibly)
