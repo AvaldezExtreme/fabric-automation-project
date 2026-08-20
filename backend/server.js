@@ -13,9 +13,11 @@ import { authMiddleware } from './middleware/authMiddleware.js';
 
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const PORT = process.env.PORT || 3000;
-const HOST = process.env.HOST || '0.0.0.0';
+const PORT = process.env.PORT || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+// Railway's edge proxy reaches the container over IPv6; trust its X-Forwarded-For
+app.set('trust proxy', 1);
 
 // Serve frontend static files in production
 if (NODE_ENV === 'production') {
@@ -152,14 +154,15 @@ app.use((req, res) => {
 });
 
 // ===== START SERVER =====
-const server = app.listen(PORT, HOST, () => {
+// No host argument: binds dual-stack (IPv4 + IPv6). Railway requires IPv6.
+const server = app.listen(PORT, () => {
   console.log(`
 ╔══════════════════════════════════════════════════════════════╗
 ║     Network Configuration Automation Tool - Backend v2       ║
 ╠══════════════════════════════════════════════════════════════╣
 ║ Version:          V2608172                                   ║
 ║ Status:           ✓ Running                                   ║
-║ API URL:          http://${HOST}:${PORT}                     ║
+║ Listening on:     port ${PORT} (all interfaces, IPv4+IPv6)   ║
 ║ Environment:      ${NODE_ENV}                                 ║
 ║ Authentication:   ✓ Enabled (JWT)                            ║
 ║ Security:         ✓ Helmet + Rate Limiting                   ║
