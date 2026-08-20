@@ -1,6 +1,6 @@
 // ============================================
 // Template & Sample Data Routes
-// Version: V2608204
+// Version: V2608206
 // Purpose: Generate the fillable Excel template in-app. Matches Carlos's
 //          proven column layout (A-T) with his auto-population formulas:
 //          I-SID, I-SID Name, SwitchName, SiteID compute themselves.
@@ -13,7 +13,7 @@ import { extractNetworkData, buildTopology } from '../services/excelParser.js';
 
 const router = express.Router();
 
-const TEMPLATE_VERSION = 'V2608205';
+const TEMPLATE_VERSION = 'V2608206';
 const BANNER_ROW = 6;        // visual separator between examples and data entry
 const FIRST_DATA_ROW = 7;    // customers start typing here
 const DATA_ROWS = 1000; // formulas + unlocked input cells prepared through this row
@@ -84,7 +84,7 @@ router.get('/', async (req, res) => {
       ['', '1. The GRAY rows (2-5) are a working example — try editing them and watch the green columns react. The ORANGE banner (row 6) marks where the example ends.'],
       ['', '2. Enter your real data STARTING AT ROW 7, below the orange banner. One row per switch: Location, Service Application (short site code like LHS), Layer (12), Site (a number), Edge Vlans, Name, Subnet, DeviceType, DefaultGateway, SwitchType (L2/L3), Closet.'],
       ['', '3. Watch SwitchName, I-SID, I-SID Name, and MgmtVLAN build themselves as you type.'],
-      ['', '4. Extra VLANs for a site go on their own rows: fill Service Application, Layer, Site, Edge Vlans, Name, Subnet, DeviceType — leave Closet/SwitchType blank (no switch on that row).'],
+      ['', '4. Extra VLANs for a site go on their own rows: fill Service Application, Layer, Site, Edge Vlans, Name, Subnet, DeviceType — leave Closet/SwitchType blank (no switch on that row). If a VLAN row is missing something the formulas need, the empty cells turn RED.'],
       ['', '5. When your data is in, DELETE the example and banner: select rows 2-6, right-click, Delete Rows.'],
       ['', '6. Save and upload at the FACE portal.'],
       ['', ''],
@@ -210,6 +210,28 @@ router.get('/', async (req, res) => {
       type: 'whole', operator: 'between', formulae: [1, 4094], allowBlank: true,
       showErrorMessage: true, errorTitle: 'Invalid VLAN ID',
       error: 'VLAN ID must be a whole number between 1 and 4094.'
+    });
+
+    // Guardrail: when a row has a VLAN (E filled) but is missing the fields
+    // the formulas need — Service Application (B), Layer (C), Site (D), or
+    // Name (F) — those empty cells glow red so the customer sees what to fill.
+    ws.addConditionalFormatting({
+      ref: `B${FIRST_DATA_ROW}:D${DATA_ROWS}`,
+      rules: [{
+        type: 'expression',
+        priority: 1,
+        formulae: [`AND($E${FIRST_DATA_ROW}<>"",B${FIRST_DATA_ROW}="")`],
+        style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } } }
+      }]
+    });
+    ws.addConditionalFormatting({
+      ref: `F${FIRST_DATA_ROW}:F${DATA_ROWS}`,
+      rules: [{
+        type: 'expression',
+        priority: 1,
+        formulae: [`AND($E${FIRST_DATA_ROW}<>"",F${FIRST_DATA_ROW}="")`],
+        style: { fill: { type: 'pattern', pattern: 'solid', bgColor: { argb: 'FFFFC7CE' } } }
+      }]
     });
 
     // Unlock input cells (everything else stays locked = formulas protected;
