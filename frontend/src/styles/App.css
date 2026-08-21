@@ -85,7 +85,7 @@ body {
 }
 
 .header-content {
-  max-width: 1600px;
+  max-width: none;
   margin: 0 auto;
   display: flex;
   justify-content: space-between;
@@ -174,7 +174,7 @@ body {
   display: flex;
   flex: 1;
   overflow: hidden;
-  max-width: 1600px;
+  max-width: none;
   margin: 0 auto;
   width: 100%;
 }
@@ -707,7 +707,7 @@ input:focus, textarea:focus, select:focus {
 }
 
 .footer-content {
-  max-width: 1600px;
+  max-width: none;
   margin: 0 auto;
   display: flex;
   justify-content: space-between;

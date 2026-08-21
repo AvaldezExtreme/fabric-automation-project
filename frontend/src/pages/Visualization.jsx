@@ -31,16 +31,21 @@ function layoutSite(switches) {
   const topo = buildClosetTopology(switches);
   const positions = new Map();
 
-  // MDF closet: horizontal row across the top, root first
+  // MDF closet: horizontal rows across the top, root first.
+  // Wraps when the closet is too wide for the canvas (e.g. 7 MDF switches).
   const mdfList = topo.closets.get(topo.mdfKey) || [];
-  const mdfY = 120;
+  const MDF_PER_ROW = Math.max(1, Math.floor((CANVAS_W - 40) / (NODE_W + 30)));
+  const mdfRows = Math.max(1, Math.ceil(mdfList.length / MDF_PER_ROW));
   mdfList.forEach((sw, i) => {
-    const x = CANVAS_W / 2 + (i - (mdfList.length - 1) / 2) * (NODE_W + 30);
-    positions.set(sw.name, { x, y: mdfY, sw });
+    const row = Math.floor(i / MDF_PER_ROW);
+    const inRow = Math.min(MDF_PER_ROW, mdfList.length - row * MDF_PER_ROW);
+    const col = i % MDF_PER_ROW;
+    const x = CANVAS_W / 2 + (col - (inRow - 1) / 2) * (NODE_W + 30);
+    positions.set(sw.name, { x, y: 120 + row * (NODE_H + STACK_GAP), sw });
   });
 
   // Access closets: columns below, each closet a vertical stack
-  let y = 300;
+  let y = 120 + (mdfRows - 1) * (NODE_H + STACK_GAP) + 180;
   const keys = topo.accessClosets;
   for (let r = 0; r * CLOSETS_PER_ROW < keys.length; r++) {
     const rowKeys = keys.slice(r * CLOSETS_PER_ROW, (r + 1) * CLOSETS_PER_ROW);
@@ -123,12 +128,32 @@ function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
         if (!a || !b) return null;
 
         if (lnk.kind === 'chain') {
-          // Same closet: horizontal (MDF row) or vertical (access stack)
-          const horizontal = Math.abs(a.y - b.y) < 2;
-          const x1 = horizontal ? a.x + NODE_W / 2 - 8 : a.x;
-          const y1 = horizontal ? a.y : a.y + NODE_H / 2 - 4;
-          const x2 = horizontal ? b.x - NODE_W / 2 + 8 : b.x;
-          const y2 = horizontal ? b.y : b.y - NODE_H / 2 + 4;
+          // Same closet. Three shapes: horizontal (same MDF row), straight
+          // vertical (access stack), or a curve when an MDF row wraps.
+          const sameRow = Math.abs(a.y - b.y) < 2;
+          const sameCol = Math.abs(a.x - b.x) < 2;
+
+          if (!sameRow && !sameCol) {
+            // Wrapped MDF row: curve from end of one row to start of the next
+            const y1 = a.y + NODE_H / 2 - 4;
+            const y2 = b.y - NODE_H / 2 + 4;
+            const path = `M ${a.x} ${y1} C ${a.x} ${y1 + 50}, ${b.x} ${y2 - 50}, ${b.x} ${y2}`;
+            return (
+              <path
+                key={`lnk-${idx}`}
+                d={path} fill="none"
+                stroke={BRAND.success} strokeWidth="3" opacity="0.85"
+                strokeDasharray="8 5"
+              >
+                <animate attributeName="stroke-dashoffset" from="26" to="0" dur="1.2s" repeatCount="indefinite" />
+              </path>
+            );
+          }
+
+          const x1 = sameRow ? a.x + NODE_W / 2 - 8 : a.x;
+          const y1 = sameRow ? a.y : a.y + NODE_H / 2 - 4;
+          const x2 = sameRow ? b.x - NODE_W / 2 + 8 : b.x;
+          const y2 = sameRow ? b.y : b.y - NODE_H / 2 + 4;
           return (
             <line
               key={`lnk-${idx}`}
@@ -527,7 +552,7 @@ function PDFContent({ sites }) {
 
 const styles = {
   container: {
-    maxWidth: '1500px',
+    maxWidth: '100%',
     padding: '20px'
   },
   noData: {
