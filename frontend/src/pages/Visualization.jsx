@@ -335,7 +335,7 @@ function Visualization({ data, onNext, onBack }) {
     <div className="page-visualization" style={styles.container}>
       <h2>Step 6: Network Topology Visualization</h2>
       <p className="page-description">
-        Closet-accurate fabric view - access closets uplink to the MDF, switches chain within each closet
+        Closet-accurate fabric view - access closets uplink to the MDF, switches chain within each closet. Click any switch for its details.
       </p>
 
       {/* Site Selector */}
@@ -361,7 +361,12 @@ function Visualization({ data, onNext, onBack }) {
         ))}
       </div>
 
-      <div style={styles.mainLayout}>
+      {/* Full-width topology by default; details panel slides in on select */}
+      <div style={{
+        ...styles.mainLayout,
+        gridTemplateColumns: selectedSwitchData ? '2fr 1fr' : '1fr',
+        transition: 'grid-template-columns 0.3s ease'
+      }}>
         {/* Topology Canvas */}
         <div style={styles.canvasPanel}>
           <TopologySVG
@@ -386,11 +391,20 @@ function Visualization({ data, onNext, onBack }) {
           </div>
         </div>
 
-        {/* Details Panel */}
+        {/* Details Panel - only rendered when a switch is selected */}
+        {selectedSwitchData && (
         <div style={styles.rightPanel}>
-          {selectedSwitchData ? (
             <div>
-              <h3 style={styles.sectionTitle}>🖥️ {selectedSwitchData.name}</h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ ...styles.sectionTitle, marginBottom: 0 }}>🖥️ {selectedSwitchData.name}</h3>
+                <button
+                  onClick={() => setSelectedSwitch(null)}
+                  title="Close details"
+                  style={styles.closeBtn}
+                >
+                  ✕
+                </button>
+              </div>
 
               <div style={styles.detailsCard}>
                 <div style={styles.detailRow}>
@@ -451,16 +465,8 @@ function Visualization({ data, onNext, onBack }) {
                 </div>
               </div>
             </div>
-          ) : (
-            <div style={styles.emptyState}>
-              <div style={styles.emptyIcon}>🔍</div>
-              <h4>Select a switch</h4>
-              <p style={{ fontSize: '13px' }}>
-                Click any switch in the diagram to see its VLANs, I-SIDs, subnets, and management details.
-              </p>
-            </div>
-          )}
         </div>
+        )}
       </div>
 
       {/* Off-screen PDF content (html2canvas can't capture display:none) */}
@@ -696,14 +702,17 @@ const styles = {
     fontSize: '11px',
     color: '#777'
   },
-  emptyState: {
-    textAlign: 'center',
-    color: '#999',
-    paddingTop: '40px'
-  },
-  emptyIcon: {
-    fontSize: '42px',
-    marginBottom: '12px'
+  closeBtn: {
+    border: 'none',
+    background: '#f3edfb',
+    color: BRAND.purple,
+    width: '28px',
+    height: '28px',
+    borderRadius: '50%',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: '700',
+    lineHeight: 1
   },
   pdfHolder: {
     position: 'absolute',
