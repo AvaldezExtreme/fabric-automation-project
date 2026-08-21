@@ -6,6 +6,7 @@
 // ============================================
 
 import React, { useState } from 'react';
+import { isMdfSwitch, buildClosetTopology } from '../utils/closetTopology.js';
 
 function Review({ data, onNext, onError }) {
   const [switches, setSwitches] = useState(data.switches);
@@ -148,12 +149,12 @@ function Review({ data, onNext, onError }) {
           <div className="stat-label">Sites</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{switches.filter(s => s.name.includes('MDF')).length}</div>
-          <div className="stat-label">MDFs</div>
+          <div className="stat-value">{switches.filter(s => isMdfSwitch(s)).length}</div>
+          <div className="stat-label">MDF Switches</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{switches.filter(s => s.name.includes('IDF')).length}</div>
-          <div className="stat-label">IDFs</div>
+          <div className="stat-value">{switches.filter(s => !isMdfSwitch(s)).length}</div>
+          <div className="stat-label">Access Switches</div>
         </div>
       </div>
 
@@ -168,32 +169,45 @@ function Review({ data, onNext, onError }) {
               </div>
 
               <div style={{ marginTop: '1rem' }}>
-                {sws.filter(s => s.name.includes('MDF')).length > 0 && (
-                  <div style={{ marginBottom: '1rem' }}>
-                    <strong style={{ color: '#6f2da8' }}>Distribution Layer (MDF):</strong>
-                    <div style={{ marginLeft: '1rem', marginTop: '0.5rem' }}>
-                      {sws.filter(s => s.name.includes('MDF')).map(renderSwitchItem)}
-                    </div>
-                  </div>
-                )}
+                {(() => {
+                  const topo = buildClosetTopology(sws);
+                  const mdfList = topo.closets.get(topo.mdfKey) || [];
+                  return (
+                    <>
+                      {mdfList.length > 0 && (
+                        <div style={{ marginBottom: '1rem' }}>
+                          <strong style={{ color: '#5B059C' }}>
+                            🏛️ Distribution — {topo.mdfKey} ({mdfList.length} switch{mdfList.length === 1 ? '' : 'es'}):
+                          </strong>
+                          <div style={{ marginLeft: '1rem', marginTop: '0.5rem' }}>
+                            {mdfList.map(renderSwitchItem)}
+                          </div>
+                        </div>
+                      )}
 
-                {sws.filter(s => s.name.includes('IDF')).length > 0 && (
-                  <div style={{ marginBottom: '1rem' }}>
-                    <strong style={{ color: '#8b3fbf' }}>Access Layer (IDF):</strong>
-                    <div style={{ marginLeft: '1rem', marginTop: '0.5rem' }}>
-                      {sws.filter(s => s.name.includes('IDF')).map(renderSwitchItem)}
-                    </div>
-                  </div>
-                )}
-
-                {sws.filter(s => !s.name.includes('MDF') && !s.name.includes('IDF')).length > 0 && (
-                  <div style={{ marginBottom: '1rem' }}>
-                    <strong style={{ color: '#8b3fbf' }}>Other Switches:</strong>
-                    <div style={{ marginLeft: '1rem', marginTop: '0.5rem' }}>
-                      {sws.filter(s => !s.name.includes('MDF') && !s.name.includes('IDF')).map(renderSwitchItem)}
-                    </div>
-                  </div>
-                )}
+                      {topo.accessClosets.length > 0 && (
+                        <div style={{ marginBottom: '1rem' }}>
+                          <strong style={{ color: '#7519F9' }}>
+                            🚪 Access Closets ({topo.accessClosets.length}):
+                          </strong>
+                          {topo.accessClosets.map(closetKey => {
+                            const list = topo.closets.get(closetKey);
+                            return (
+                              <div key={closetKey} style={{ marginLeft: '1rem', marginTop: '0.75rem' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#666' }}>
+                                  {closetKey} ({list.length} switch{list.length === 1 ? '' : 'es'})
+                                </span>
+                                <div style={{ marginTop: '0.25rem' }}>
+                                  {list.map(renderSwitchItem)}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           ))}

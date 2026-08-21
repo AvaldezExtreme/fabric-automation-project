@@ -383,20 +383,45 @@ export const buildTopology = (switches) => {
     }
   });
   
-  const mdfSwitches = switches.filter(s => s.name.includes('MDF'));
-  const idfSwitches = switches.filter(s => s.name.includes('IDF'));
-  
-  mdfSwitches.forEach(mdf => {
-    idfSwitches.forEach(idf => {
-      if (mdf.siteId === idf.siteId) {
-        topology.connections.push({
-          source: mdf.name,
-          target: idf.name,
-          type: 'uplink'
-        });
+  // Closet-based connections per site: the MDF closet's first switch is the
+  // root; each access closet's first switch (-1) uplinks to it, and switches
+  // within a closet chain to the previous one (-2 -> -1, -3 -> -2).
+  const suffixNum = (name) => {
+    const m = (name || '').toString().match(/-(\d+)$/);
+    return m ? parseInt(m[1]) : 0;
+  };
+
+  const sites = new Map();
+  switches.forEach(sw => {
+    if (!sites.has(sw.siteId)) sites.set(sw.siteId, []);
+    sites.get(sw.siteId).push(sw);
+  });
+
+  sites.forEach(siteSwitches => {
+    const closets = new Map();
+    siteSwitches.forEach(sw => {
+      const key = (sw.closet && sw.closet.toString().trim()) || sw.name;
+      if (!closets.has(key)) closets.set(key, []);
+      closets.get(key).push(sw);
+    });
+    closets.forEach(list => list.sort((a, b) => suffixNum(a.name) - suffixNum(b.name)));
+
+    let mdfKey = [...closets.keys()].find(k => k.toUpperCase().includes('MDF'));
+    if (!mdfKey) {
+      const withL3 = [...closets.entries()].find(([, list]) => list.some(s => s.type === 'L3'));
+      mdfKey = withL3 ? withL3[0] : [...closets.keys()][0];
+    }
+    const root = closets.get(mdfKey)[0];
+
+    closets.forEach((list, key) => {
+      for (let i = 1; i < list.length; i++) {
+        topology.connections.push({ source: list[i - 1].name, target: list[i].name, type: 'chain' });
+      }
+      if (key !== mdfKey && list.length > 0) {
+        topology.connections.push({ source: root.name, target: list[0].name, type: 'uplink' });
       }
     });
   });
-  
+
   return topology;
 };

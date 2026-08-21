@@ -1,48 +1,63 @@
 // ============================================
 // Topology Visualization - Interactive & PDF Export
-// Version: V2608174
-// Purpose: Professional fabric topology with hierarchical layout,
-//          animated links, and PDF export (bundled jsPDF/html2canvas)
+// Version: V2608211
+// Purpose: Closet-accurate fabric topology (MDF root, access closets
+//          star off it, in-closet chains) with Extreme brand palette
+//          and per-site PDF export.
 // ============================================
 
 import React, { useState } from 'react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import { buildClosetTopology } from '../utils/closetTopology.js';
 
-// ---------- Layout helpers ----------
+// Extreme Networks approved palette (see ExtremeTheme.css)
+const BRAND = {
+  purple: '#5B059C',
+  indigo: '#20004C',
+  violet: '#7519F9',
+  steel: '#7D76F2',
+  success: '#00CC99',
+  warning: '#FF9900'
+};
 
 const CANVAS_W = 1000;
-const NODE_W = 168;
-const NODE_H = 78;
-const L2_PER_ROW = 4;
+const NODE_W = 164;
+const NODE_H = 74;
+const CLOSETS_PER_ROW = 5;
+const STACK_GAP = 34;
 
 function layoutSite(switches) {
-  const l3 = switches.filter(sw => sw.type === 'L3');
-  const l2 = switches.filter(sw => sw.type !== 'L3');
-
+  const topo = buildClosetTopology(switches);
   const positions = new Map();
 
-  // Core row (L3) centered on top
-  const coreY = 110;
-  l3.forEach((sw, i) => {
-    const x = (CANVAS_W / (l3.length + 1)) * (i + 1);
-    positions.set(sw.name, { x, y: coreY, sw });
+  // MDF closet: horizontal row across the top, root first
+  const mdfList = topo.closets.get(topo.mdfKey) || [];
+  const mdfY = 120;
+  mdfList.forEach((sw, i) => {
+    const x = CANVAS_W / 2 + (i - (mdfList.length - 1) / 2) * (NODE_W + 30);
+    positions.set(sw.name, { x, y: mdfY, sw });
   });
 
-  // Access rows (L2) below, wrapped
-  const startY = l3.length > 0 ? 300 : 140;
-  const rows = Math.max(1, Math.ceil(l2.length / L2_PER_ROW));
-  l2.forEach((sw, i) => {
-    const row = Math.floor(i / L2_PER_ROW);
-    const inRow = Math.min(L2_PER_ROW, l2.length - row * L2_PER_ROW);
-    const col = i % L2_PER_ROW;
-    const x = (CANVAS_W / (inRow + 1)) * (col + 1);
-    const y = startY + row * 170;
-    positions.set(sw.name, { x, y, sw });
-  });
+  // Access closets: columns below, each closet a vertical stack
+  let y = 300;
+  const keys = topo.accessClosets;
+  for (let r = 0; r * CLOSETS_PER_ROW < keys.length; r++) {
+    const rowKeys = keys.slice(r * CLOSETS_PER_ROW, (r + 1) * CLOSETS_PER_ROW);
+    let maxStack = 1;
+    rowKeys.forEach((key, c) => {
+      const list = topo.closets.get(key);
+      maxStack = Math.max(maxStack, list.length);
+      const x = (CANVAS_W / (rowKeys.length + 1)) * (c + 1);
+      list.forEach((sw, i) => {
+        positions.set(sw.name, { x, y: y + i * (NODE_H + STACK_GAP), sw });
+      });
+    });
+    y += maxStack * (NODE_H + STACK_GAP) + 60;
+  }
 
-  const height = Math.max(420, startY + rows * 170 - 40);
-  return { positions, l3, l2, height };
+  const height = Math.max(430, y - 10);
+  return { positions, topo, height };
 }
 
 function truncate(str, max = 18) {
@@ -54,41 +69,32 @@ function truncate(str, max = 18) {
 
 function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
   const [hovered, setHovered] = useState(null);
-  const { positions, l3, l2, height } = layoutSite(site.switches);
-
-  const links = [];
-  if (l3.length > 0) {
-    // Core interconnect (L3 <-> L3)
-    for (let i = 0; i < l3.length - 1; i++) {
-      links.push({ from: l3[i].name, to: l3[i + 1].name, kind: 'core' });
-    }
-    // Fabric uplinks: every L2 to every L3
-    l2.forEach(a => l3.forEach(c => links.push({ from: c.name, to: a.name, kind: 'fabric' })));
-  } else {
-    // No core: chain the access switches
-    for (let i = 0; i < l2.length - 1; i++) {
-      links.push({ from: l2[i].name, to: l2[i + 1].name, kind: 'fabric' });
-    }
-  }
+  const { positions, topo, height } = layoutSite(site.switches);
+  const mdfCount = (topo.closets.get(topo.mdfKey) || []).length;
 
   return (
     <svg
       width="100%"
       viewBox={`0 0 ${CANVAS_W} ${height}`}
-      style={{ display: 'block', borderRadius: '10px', background: 'linear-gradient(160deg, #1a0533 0%, #2d0a54 55%, #1a0533 100%)' }}
+      style={{
+        display: 'block',
+        borderRadius: '10px',
+        background: `linear-gradient(160deg, ${BRAND.indigo} 0%, #3a0d78 55%, ${BRAND.indigo} 100%)`,
+        fontFamily: "'DM Sans', -apple-system, 'Segoe UI', sans-serif"
+      }}
     >
       <defs>
-        <linearGradient id="gradL3" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#00e6ac" />
+        <linearGradient id="gradMdf" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={BRAND.success} />
           <stop offset="100%" stopColor="#00926b" />
         </linearGradient>
-        <linearGradient id="gradL2" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#ffb340" />
-          <stop offset="100%" stopColor="#e07800" />
+        <linearGradient id="gradAcc" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={BRAND.warning} />
+          <stop offset="100%" stopColor="#cc7a00" />
         </linearGradient>
         <linearGradient id="gradSel" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#9a4dff" />
-          <stop offset="100%" stopColor="#5B059C" />
+          <stop offset="0%" stopColor={BRAND.violet} />
+          <stop offset="100%" stopColor={BRAND.purple} />
         </linearGradient>
         <filter id="nodeShadow" x="-30%" y="-30%" width="160%" height="160%">
           <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000" floodOpacity="0.45" />
@@ -107,29 +113,35 @@ function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
         {site.name}
       </text>
       <text x={CANVAS_W / 2} y="60" textAnchor="middle" fontSize="12" fill="#c9a8ff">
-        {l3.length} core · {l2.length} access · SPB Fabric
+        MDF ({mdfCount} switch{mdfCount === 1 ? '' : 'es'}) · {topo.accessClosets.length} access closet{topo.accessClosets.length === 1 ? '' : 's'} · SPB Fabric
       </text>
 
       {/* Links */}
-      {links.map((lnk, idx) => {
+      {topo.links.map((lnk, idx) => {
         const a = positions.get(lnk.from);
         const b = positions.get(lnk.to);
         if (!a || !b) return null;
 
-        if (lnk.kind === 'core') {
+        if (lnk.kind === 'chain') {
+          // Same closet: horizontal (MDF row) or vertical (access stack)
+          const horizontal = Math.abs(a.y - b.y) < 2;
+          const x1 = horizontal ? a.x + NODE_W / 2 - 8 : a.x;
+          const y1 = horizontal ? a.y : a.y + NODE_H / 2 - 4;
+          const x2 = horizontal ? b.x - NODE_W / 2 + 8 : b.x;
+          const y2 = horizontal ? b.y : b.y - NODE_H / 2 + 4;
           return (
             <line
               key={`lnk-${idx}`}
-              x1={a.x + NODE_W / 2 - 10} y1={a.y}
-              x2={b.x - NODE_W / 2 + 10} y2={b.y}
-              stroke="#00e6ac" strokeWidth="4" opacity="0.85"
-              strokeDasharray="10 6"
+              x1={x1} y1={y1} x2={x2} y2={y2}
+              stroke={BRAND.success} strokeWidth="3" opacity="0.85"
+              strokeDasharray="8 5"
             >
-              <animate attributeName="stroke-dashoffset" from="32" to="0" dur="1.2s" repeatCount="indefinite" />
+              <animate attributeName="stroke-dashoffset" from="26" to="0" dur="1.2s" repeatCount="indefinite" />
             </line>
           );
         }
 
+        // Uplink: curve from MDF root down to the closet head
         const y1 = a.y + NODE_H / 2 - 6;
         const y2 = b.y - NODE_H / 2 + 6;
         const path = `M ${a.x} ${y1} C ${a.x} ${y1 + 70}, ${b.x} ${y2 - 70}, ${b.x} ${y2}`;
@@ -138,9 +150,9 @@ function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
             key={`lnk-${idx}`}
             d={path}
             fill="none"
-            stroke="#b57bff"
+            stroke={BRAND.steel}
             strokeWidth="2"
-            opacity="0.55"
+            opacity="0.6"
             strokeDasharray="7 5"
           >
             <animate attributeName="stroke-dashoffset" from="24" to="0" dur="1.4s" repeatCount="indefinite" />
@@ -152,7 +164,8 @@ function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
       {Array.from(positions.values()).map(({ x, y, sw }) => {
         const isSelected = sw.name === selectedSwitch;
         const isHovered = interactive && sw.name === hovered;
-        const grad = isSelected ? 'url(#gradSel)' : sw.type === 'L3' ? 'url(#gradL3)' : 'url(#gradL2)';
+        const inMdf = ((sw.closet || sw.name || '').toString().toUpperCase().includes('MDF'));
+        const grad = isSelected ? 'url(#gradSel)' : inMdf ? 'url(#gradMdf)' : 'url(#gradAcc)';
 
         return (
           <g
@@ -164,7 +177,6 @@ function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
             style={interactive ? { cursor: 'pointer' } : undefined}
             filter={isSelected || isHovered ? 'url(#glow)' : 'url(#nodeShadow)'}
           >
-            {/* Chassis */}
             <rect
               width={NODE_W} height={NODE_H} rx="12"
               fill={grad}
@@ -172,32 +184,27 @@ function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
               strokeWidth={isSelected ? 3 : 1.5}
             />
 
-            {/* Status LED */}
-            <circle cx="16" cy="16" r="4" fill="#3dff8f">
+            <circle cx="15" cy="15" r="4" fill="#3dff8f">
               <animate attributeName="opacity" values="1;0.35;1" dur="2s" repeatCount="indefinite" />
             </circle>
 
-            {/* Type badge */}
-            <rect x={NODE_W - 46} y="8" width="38" height="17" rx="8" fill="rgba(0,0,0,0.35)" />
-            <text x={NODE_W - 27} y="20" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">
-              {sw.type === 'L3' ? 'CORE' : 'ACC'}
+            <rect x={NODE_W - 40} y="8" width="32" height="16" rx="8" fill="rgba(0,0,0,0.35)" />
+            <text x={NODE_W - 24} y="20" textAnchor="middle" fontSize="10" fontWeight="700" fill="#fff">
+              {sw.type || 'L2'}
             </text>
 
-            {/* Name */}
-            <text x={NODE_W / 2} y="40" textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">
+            <text x={NODE_W / 2} y="38" textAnchor="middle" fontSize="12.5" fontWeight="700" fill="#fff">
               {truncate(sw.name)}
             </text>
 
-            {/* VLAN count */}
-            <text x={NODE_W / 2} y="55" textAnchor="middle" fontSize="10" fill="rgba(255,255,255,0.85)">
-              {(sw.vlans?.length || 0)} VLANs{sw.closet ? ` · ${truncate(sw.closet, 10)}` : ''}
+            <text x={NODE_W / 2} y="52" textAnchor="middle" fontSize="9.5" fill="rgba(255,255,255,0.85)">
+              {(sw.vlans?.length || 0)} VLANs
             </text>
 
-            {/* Port strip */}
             {Array.from({ length: 10 }).map((_, p) => (
               <rect
                 key={p}
-                x={14 + p * 14} y={NODE_H - 13} width="9" height="6" rx="1.5"
+                x={12 + p * 14} y={NODE_H - 12} width="9" height="5.5" rx="1.5"
                 fill="rgba(255,255,255,0.55)"
               />
             ))}
@@ -206,13 +213,15 @@ function TopologySVG({ site, selectedSwitch, onSelect, interactive = true }) {
       })}
 
       {/* Legend */}
-      <g transform={`translate(20, ${height - 30})`} fontSize="11" fill="#e0ceff">
-        <rect x="0" y="-10" width="14" height="10" rx="3" fill="url(#gradL3)" />
-        <text x="20" y="0">Core (L3)</text>
-        <rect x="95" y="-10" width="14" height="10" rx="3" fill="url(#gradL2)" />
-        <text x="115" y="0">Access (L2)</text>
-        <line x1="205" y1="-5" x2="235" y2="-5" stroke="#b57bff" strokeWidth="2" strokeDasharray="7 5" />
-        <text x="242" y="0">Fabric link</text>
+      <g transform={`translate(20, ${height - 26})`} fontSize="11" fill="#e0ceff">
+        <rect x="0" y="-10" width="14" height="10" rx="3" fill="url(#gradMdf)" />
+        <text x="20" y="0">MDF closet</text>
+        <rect x="105" y="-10" width="14" height="10" rx="3" fill="url(#gradAcc)" />
+        <text x="125" y="0">Access closet</text>
+        <line x1="230" y1="-5" x2="258" y2="-5" stroke={BRAND.steel} strokeWidth="2" strokeDasharray="7 5" />
+        <text x="265" y="0">Uplink to MDF</text>
+        <line x1="370" y1="-5" x2="398" y2="-5" stroke={BRAND.success} strokeWidth="3" strokeDasharray="8 5" />
+        <text x="405" y="0">In-closet chain</text>
       </g>
     </svg>
   );
@@ -230,7 +239,6 @@ function Visualization({ data, onNext, onBack }) {
     return <div style={styles.noData}>No topology data available</div>;
   }
 
-  // Group switches by site
   const sitesMap = new Map();
   data.switches.forEach(sw => {
     if (!sitesMap.has(sw.siteId)) {
@@ -248,7 +256,9 @@ function Visualization({ data, onNext, onBack }) {
   const switchesInSite = currentSite.switches || [];
   const selectedSwitchData = switchesInSite.find(s => s.name === selectedSwitch);
 
-  // PDF export using bundled jsPDF + html2canvas (no CDN - blocked by CSP)
+  // PDF export: capture each site section separately. One giant capture
+  // exceeds the browser's max canvas size on multi-site districts, which
+  // produced blank PDFs - per-section capture keeps every page rendered.
   const generatePDF = (scope) => {
     setExportMode(scope);
     setExporting(true);
@@ -258,23 +268,31 @@ function Visualization({ data, onNext, onBack }) {
         const element = document.getElementById('pdf-content');
         if (!element) throw new Error('PDF content not found');
 
-        const canvas = await html2canvas(element, { scale: 2, backgroundColor: '#ffffff' });
-        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const sections = element.querySelectorAll('.pdf-site');
+        if (sections.length === 0) throw new Error('Nothing to export');
 
         const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
         const pageW = pdf.internal.pageSize.getWidth();
         const pageH = pdf.internal.pageSize.getHeight();
-        const imgH = (canvas.height * pageW) / canvas.width;
+        let firstPage = true;
 
-        let heightLeft = imgH;
-        let position = 0;
-        pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
-        heightLeft -= pageH;
-        while (heightLeft > 0) {
-          position -= pageH;
-          pdf.addPage();
+        for (const section of sections) {
+          const canvas = await html2canvas(section, { scale: 2, backgroundColor: '#ffffff' });
+          const imgData = canvas.toDataURL('image/jpeg', 0.95);
+          const imgH = (canvas.height * pageW) / canvas.width;
+
+          let heightLeft = imgH;
+          let position = 0;
+          if (!firstPage) pdf.addPage();
+          firstPage = false;
           pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
           heightLeft -= pageH;
+          while (heightLeft > 0) {
+            position -= pageH;
+            pdf.addPage();
+            pdf.addImage(imgData, 'JPEG', 0, position, pageW, imgH);
+            heightLeft -= pageH;
+          }
         }
 
         const siteName = scope === 'all' ? 'All-Sites' : currentSite.name.replace(/\s+/g, '-');
@@ -285,14 +303,14 @@ function Visualization({ data, onNext, onBack }) {
         setExportMode(null);
         setExporting(false);
       }
-    }, 200);
+    }, 250);
   };
 
   return (
     <div className="page-visualization" style={styles.container}>
       <h2>Step 6: Network Topology Visualization</h2>
       <p className="page-description">
-        Click a site to view its fabric, click any switch for full details
+        Closet-accurate fabric view - access closets uplink to the MDF, switches chain within each closet
       </p>
 
       {/* Site Selector */}
@@ -307,7 +325,7 @@ function Visualization({ data, onNext, onBack }) {
             style={{
               ...styles.siteTab,
               background: currentSite.id === site.id
-                ? 'linear-gradient(135deg, #7519F9, #5B059C)'
+                ? `linear-gradient(135deg, ${BRAND.violet}, ${BRAND.purple})`
                 : '#EFEFEF',
               color: currentSite.id === site.id ? 'white' : '#444',
               boxShadow: currentSite.id === site.id ? '0 4px 12px rgba(117,25,249,0.4)' : 'none'
@@ -336,7 +354,7 @@ function Visualization({ data, onNext, onBack }) {
             <button
               onClick={() => generatePDF('all')}
               disabled={exporting}
-              style={{ ...styles.exportBtn, background: 'linear-gradient(135deg, #00CC99, #00926b)' }}
+              style={{ ...styles.exportBtn, background: `linear-gradient(135deg, ${BRAND.success}, #00926b)` }}
             >
               {exporting && exportMode === 'all' ? 'Generating…' : '📊 All Sites'}
             </button>
@@ -355,8 +373,8 @@ function Visualization({ data, onNext, onBack }) {
                   <span style={{
                     ...styles.typeBadge,
                     background: selectedSwitchData.type === 'L3'
-                      ? 'linear-gradient(135deg, #00CC99, #00926b)'
-                      : 'linear-gradient(135deg, #ffb340, #e07800)'
+                      ? `linear-gradient(135deg, ${BRAND.success}, #00926b)`
+                      : `linear-gradient(135deg, ${BRAND.warning}, #cc7a00)`
                   }}>
                     {selectedSwitchData.type === 'L3' ? 'Core (L3)' : 'Access (L2)'}
                   </span>
@@ -441,30 +459,32 @@ function Visualization({ data, onNext, onBack }) {
 }
 
 // ---------- PDF report content ----------
+// Each .pdf-site block is captured as its own canvas (and PDF page set)
 
 function PDFContent({ sites }) {
   return (
-    <div style={{ padding: '24px', fontFamily: 'Arial, sans-serif', width: '1350px', background: '#fff' }}>
-      <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-        <h1 style={{ color: '#5B059C', marginBottom: '4px' }}>FACE — Network Topology Report</h1>
+    <div style={{ padding: '24px', fontFamily: "'DM Sans', Arial, sans-serif", width: '1350px', background: '#fff' }}>
+      <div className="pdf-site" style={{ textAlign: 'center', padding: '16px', background: '#fff' }}>
+        <h1 style={{ color: BRAND.purple, marginBottom: '4px' }}>FACE — Network Topology Report</h1>
         <p style={{ margin: 0 }}>Fabric Auto Configuration Engine</p>
         <p style={{ color: '#999', margin: '4px 0 0' }}>Generated: {new Date().toLocaleString()}</p>
+        <p style={{ color: '#666', margin: '10px 0 0', fontSize: '13px' }}>
+          {sites.length} site{sites.length === 1 ? '' : 's'} · {sites.reduce((n, s) => n + s.switches.length, 0)} switches
+        </p>
       </div>
 
       {sites.map(site => (
-        <div key={site.id} style={{ marginBottom: '36px' }}>
-          <h2 style={{ borderBottom: '3px solid #5B059C', paddingBottom: '8px' }}>
+        <div key={site.id} className="pdf-site" style={{ marginBottom: '24px', background: '#fff', padding: '8px 0' }}>
+          <h2 style={{ borderBottom: `3px solid ${BRAND.purple}`, paddingBottom: '8px' }}>
             📍 {site.name} (Site {site.id})
           </h2>
 
-          {/* Topology diagram */}
           <div style={{ margin: '16px 0' }}>
             <TopologySVG site={site} selectedSwitch={null} onSelect={() => {}} interactive={false} />
           </div>
 
-          {/* Per-switch tables */}
           {site.switches.map(sw => (
-            <div key={sw.name} style={{ marginBottom: '18px', paddingLeft: '16px', borderLeft: '4px solid #5B059C' }}>
+            <div key={sw.name} style={{ marginBottom: '18px', paddingLeft: '16px', borderLeft: `4px solid ${BRAND.purple}` }}>
               <h4 style={{ margin: '8px 0' }}>
                 {sw.name} — {sw.type === 'L3' ? 'Core (L3)' : 'Access (L2)'}
                 {sw.closet ? ` — ${sw.closet}` : ''}
@@ -472,7 +492,7 @@ function PDFContent({ sites }) {
               {sw.vlans && sw.vlans.length > 0 && (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                   <thead>
-                    <tr style={{ backgroundColor: '#5B059C', color: 'white' }}>
+                    <tr style={{ backgroundColor: BRAND.purple, color: 'white' }}>
                       <th style={styles.tableCell}>VLAN ID</th>
                       <th style={styles.tableCell}>Name</th>
                       <th style={styles.tableCell}>I-SID</th>
@@ -493,12 +513,12 @@ function PDFContent({ sites }) {
               )}
             </div>
           ))}
+
+          <div style={{ paddingTop: '8px', fontSize: '10px', color: '#999' }}>
+            © 2026 Extreme Networks, Inc. | FACE — Fabric Auto Configuration Engine
+          </div>
         </div>
       ))}
-
-      <div style={{ marginTop: '24px', paddingTop: '12px', borderTop: '1px solid #ccc', fontSize: '10px', color: '#999' }}>
-        <p>© 2026 Extreme Networks, Inc. | FACE — Fabric Auto Configuration Engine</p>
-      </div>
     </div>
   );
 }
@@ -554,11 +574,11 @@ const styles = {
   exportLabel: {
     fontSize: '13px',
     fontWeight: '600',
-    color: '#5B059C'
+    color: BRAND.purple
   },
   exportBtn: {
     padding: '9px 16px',
-    background: 'linear-gradient(135deg, #7519F9, #5B059C)',
+    background: `linear-gradient(135deg, ${BRAND.violet}, ${BRAND.purple})`,
     color: 'white',
     border: 'none',
     borderRadius: '8px',
@@ -577,7 +597,7 @@ const styles = {
   sectionTitle: {
     fontSize: '15px',
     fontWeight: 'bold',
-    color: '#5B059C',
+    color: BRAND.purple,
     marginTop: 0,
     marginBottom: '12px'
   },
@@ -596,7 +616,7 @@ const styles = {
   },
   label: {
     fontWeight: 'bold',
-    color: '#5B059C',
+    color: BRAND.purple,
     fontSize: '12px'
   },
   value: {
@@ -635,7 +655,7 @@ const styles = {
   },
   vlanId: {
     fontWeight: 'bold',
-    color: '#5B059C',
+    color: BRAND.purple,
     fontSize: '12px'
   },
   vlanNameTag: {
@@ -681,7 +701,7 @@ const styles = {
     fontWeight: 'bold'
   },
   nextBtn: {
-    background: 'linear-gradient(135deg, #7519F9, #5B059C)',
+    background: `linear-gradient(135deg, ${BRAND.violet}, ${BRAND.purple})`,
     color: 'white',
     border: 'none',
     padding: '12px 28px',
