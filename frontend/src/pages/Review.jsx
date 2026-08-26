@@ -8,11 +8,23 @@
 import React, { useState } from 'react';
 import { isMdfSwitch, buildClosetTopology } from '../utils/closetTopology.js';
 
-function Review({ data, onNext, onError, onUpdate }) {
+function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
   const [switches, setSwitches] = useState(data.switches);
   const [selectedName, setSelectedName] = useState(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(null);
+  const [justSaved, setJustSaved] = useState(false);
+
+  const setEditingState = (value) => {
+    setEditing(value);
+    if (onEditingChange) onEditingChange(value);
+  };
+
+  // Safety: never leave the app thinking an edit is open after unmount
+  React.useEffect(() => {
+    return () => { if (onEditingChange) onEditingChange(false); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectedSwitch = switches.find(s => s.name === selectedName) || null;
 
@@ -34,11 +46,12 @@ function Review({ data, onNext, onError, onUpdate }) {
         isid: v.isid || ''
       }))
     });
-    setEditing(true);
+    setJustSaved(false);
+    setEditingState(true);
   };
 
   const cancelEdit = () => {
-    setEditing(false);
+    setEditingState(false);
     setDraft(null);
   };
 
@@ -97,8 +110,10 @@ function Review({ data, onNext, onError, onUpdate }) {
     if (onUpdate) onUpdate({ ...data, switches: updated });
 
     setSelectedName(draft.name.trim() || orig.name);
-    setEditing(false);
+    setEditingState(false);
     setDraft(null);
+    setJustSaved(true);
+    setTimeout(() => setJustSaved(false), 6000);
   };
 
   const groupBySite = (sws) => {
@@ -124,7 +139,10 @@ function Review({ data, onNext, onError, onUpdate }) {
     <div
       key={sw.name}
       className="switch-item"
-      onClick={() => { setSelectedName(sw.name); setEditing(false); setDraft(null); }}
+      onClick={() => {
+        if (editing && !window.confirm('You have an unsaved edit in progress.\n\n• OK = switch anyway (your edit will be lost)\n• Cancel = stay so you can 💾 Save or Cancel first')) return;
+        setSelectedName(sw.name); setEditingState(false); setDraft(null);
+      }}
       style={{
         cursor: 'pointer',
         padding: '0.75rem',
@@ -238,6 +256,17 @@ function Review({ data, onNext, onError, onUpdate }) {
               </div>
             )}
           </div>
+
+          {editing && (
+            <div style={{ background: '#fef3c7', border: '1px solid #fcd34d', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '0.75rem', color: '#92400e', fontSize: '0.9rem' }}>
+              ✏️ <strong>You are editing.</strong> Your changes are NOT kept yet — click <strong>💾 Save</strong> to keep them, or <strong>Cancel</strong> to discard. Leaving this page without saving will lose them.
+            </div>
+          )}
+          {justSaved && !editing && (
+            <div style={{ background: '#d1fae5', border: '1px solid #6ee7b7', padding: '0.75rem 1rem', borderRadius: '0.5rem', marginBottom: '0.75rem', color: '#065f46', fontSize: '0.9rem' }}>
+              ✅ <strong>Your edited data has been saved</strong> and is now part of the project — configs, topology, and exports will use it. Tip: click the header <strong>💾 Save Project</strong> to also write it to your project file.
+            </div>
+          )}
 
           <div className="card">
             {!editing ? (

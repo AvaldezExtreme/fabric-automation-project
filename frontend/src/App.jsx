@@ -32,6 +32,20 @@ function App() {
     districtName: ''
   });
   const [error, setError] = useState(null);
+  // True while a step page has an unsaved inline edit open (e.g. Review's
+  // edit mode) - used to warn before navigating away
+  const [editingInProgress, setEditingInProgress] = useState(false);
+
+  const confirmLeaveEdit = () => {
+    if (!editingInProgress) return true;
+    const leave = window.confirm(
+      'You have an unsaved edit in progress.\n\n' +
+      '• OK = leave this page WITHOUT saving (your edit will be lost)\n' +
+      '• Cancel = stay here so you can 💾 Save or Cancel your edit first'
+    );
+    if (leave) setEditingInProgress(false);
+    return leave;
+  };
 
   // Apply theme to document
   useEffect(() => {
@@ -160,7 +174,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.5.1 (V2608265)',
+      appVersion: 'v2.5.2 (V2608266)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -224,6 +238,7 @@ function App() {
   };
 
   const handleStepBack = () => {
+    if (!confirmLeaveEdit()) return;
     setError(null);
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
@@ -353,7 +368,7 @@ function App() {
               {steps.map((step, idx) => (
                 <div key={idx} className="step-wrapper">
                   <button
-                    onClick={() => idx <= currentStep && setCurrentStep(idx)}
+                    onClick={() => idx <= currentStep && confirmLeaveEdit() && setCurrentStep(idx)}
                     className={`step-indicator ${
                       idx < currentStep ? 'completed' :
                       idx === currentStep ? 'active' :
@@ -442,6 +457,7 @@ function App() {
               onReset={handleReset}
               onError={handleError}
               onUpdate={(newData) => setData(newData)}
+              onEditingChange={setEditingInProgress}
             />
           </div>
         </main>
@@ -450,7 +466,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.5.1 (V2608265)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.5.2 (V2608266)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>
