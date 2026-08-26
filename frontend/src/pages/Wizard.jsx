@@ -69,7 +69,7 @@ const suggestUntrusted = (svc) =>
   /guest|iot|camera|public|dorm|byod|security/i.test(svc.name) || svc.deviceType === 'camera';
 
 const pad = (n, w) => String(n).padStart(w, '0');
-const isidFor = (site, vlan) => parseInt(`12${pad(site, 2)}${pad(vlan, 4)}`);
+const isidFor = (site, vlan) => parseInt(`2${pad(site, 2)}${pad(vlan, 4)}`);
 const subnetFor = (template, site, vlan) =>
   template.replaceAll('{site+100}', String(site + 100)).replaceAll('{site}', String(site)).replaceAll('{vlan}', String(vlan));
 
@@ -397,7 +397,7 @@ function Wizard({ onComplete, onCancel }) {
               <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '8px' }}>
                 Preview for {sites[0].code || 'first site'} (site {sites[0].site}):&nbsp;
                 {services.slice(0, 3).map(s => subnetFor(subnetTemplate, parseInt(sites[0].site), parseInt(s.vlanId) || 0)).join(' · ')}
-                &nbsp;— gateways are .1, I-SIDs build as 12 + site + VLAN (e.g. {isidFor(parseInt(sites[0].site) || 10, parseInt(services[0].vlanId) || 8)})
+                &nbsp;— gateways are .1, I-SIDs build as 2 + site + VLAN (e.g. {isidFor(parseInt(sites[0].site) || 10, parseInt(services[0].vlanId) || 8)})
               </div>
             )}
           </div>

@@ -1,6 +1,6 @@
 // ============================================
 // Template & Sample Data Routes
-// Version: V2608207
+// Version: V2608268
 // Purpose: Generate the fillable Excel template in-app. Matches Claudio's
 //          proven column layout (A-T) with his auto-population formulas:
 //          I-SID, I-SID Name, SwitchName, SiteID compute themselves.
@@ -13,7 +13,7 @@ import { extractNetworkData, buildTopology } from '../services/excelParser.js';
 
 const router = express.Router();
 
-const TEMPLATE_VERSION = 'V2608207';
+const TEMPLATE_VERSION = 'V2608268';
 const BANNER_ROW = 6;        // visual separator between examples and data entry
 const FIRST_DATA_ROW = 7;    // customers start typing here
 const DATA_ROWS = 1000; // formulas + unlocked input cells prepared through this row
@@ -23,7 +23,7 @@ const DATA_ROWS = 1000; // formulas + unlocked input cells prepared through this
 const COLUMNS = [
   { header: 'Location', key: 'Location', width: 26 },                        // A input
   { header: 'Service Application', key: 'Service Application', width: 17 },  // B input
-  { header: 'Layer', key: 'Layer', width: 8 },                               // C input (12=L2 VSN, 13=L3 VSN)
+  { header: 'Layer', key: 'Layer', width: 8 },                               // C input (2=L2 VSN, 3=L3 VSN)
   { header: 'Site', key: 'Site', width: 8 },                                 // D input
   { header: 'Edge Vlans', key: 'Edge Vlans', width: 11 },                    // E input
   { header: 'Name', key: 'Name', width: 15 },                                // F input
@@ -47,12 +47,12 @@ const AUTO_COLS = ['I', 'J', 'N', 'P', 'T'];
 const INPUT_COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'K', 'L', 'M', 'O', 'Q', 'R', 'S'];
 
 // Example rows (plain values so a freshly downloaded template still parses).
-// Demo site: Lincoln High School, Site 10, Layer 12 (L2 VSN).
+// Demo site: Lincoln High School, Site 10, Layer 2 (L2 VSN).
 const EXAMPLE_ROWS = [
-  ['LINCOLN HIGH SCHOOL', 'LHS', 12, 10, 8, 'Netmgmt', '10.110.8.0/24', 'ap', 12100008, 'LHS-Netmgmt', '', 'DEMO DISTRICT', '10.110.8.1', 'LHS-MDF1-1', 'L3', 10, 8, '', 'MDF1', '0008'],
-  ['LINCOLN HIGH SCHOOL', 'LHS', 12, 10, 16, 'VoIP', '10.110.16.0/24', 'voice', 12100016, 'LHS-VoIP', '', 'DEMO DISTRICT', '10.110.8.1', 'LHS-IDF1-1', 'L2', 10, 8, '', 'IDF1', '0016'],
-  ['LINCOLN HIGH SCHOOL', 'LHS', 12, 10, 24, 'Data', '10.110.24.0/24', 'data', 12100024, 'LHS-Data', '', 'DEMO DISTRICT', '10.110.8.1', 'LHS-IDF2-1', 'L2', 10, 8, '', 'IDF2', '0024'],
-  ['LINCOLN HIGH SCHOOL', 'LHS', 12, 10, 32, 'Cameras', '10.110.32.0/24', 'camera', 12100032, 'LHS-Cameras', '', 'DEMO DISTRICT', '10.110.8.1', '', '', 10, '', '', '', '0032']
+  ['LINCOLN HIGH SCHOOL', 'LHS', 2, 10, 8, 'Netmgmt', '10.110.8.0/24', 'ap', 2100008, 'LHS-Netmgmt', '', 'DEMO DISTRICT', '10.110.8.1', 'LHS-MDF1-1', 'L3', 10, 8, '', 'MDF1', '0008'],
+  ['LINCOLN HIGH SCHOOL', 'LHS', 2, 10, 16, 'VoIP', '10.110.16.0/24', 'voice', 2100016, 'LHS-VoIP', '', 'DEMO DISTRICT', '10.110.8.1', 'LHS-IDF1-1', 'L2', 10, 8, '', 'IDF1', '0016'],
+  ['LINCOLN HIGH SCHOOL', 'LHS', 2, 10, 24, 'Data', '10.110.24.0/24', 'data', 2100024, 'LHS-Data', '', 'DEMO DISTRICT', '10.110.8.1', 'LHS-IDF2-1', 'L2', 10, 8, '', 'IDF2', '0024'],
+  ['LINCOLN HIGH SCHOOL', 'LHS', 2, 10, 32, 'Cameras', '10.110.32.0/24', 'camera', 2100032, 'LHS-Cameras', '', 'DEMO DISTRICT', '10.110.8.1', '', '', 10, '', '', '', '0032']
 ];
 
 // ===== GET /api/template - generate the fillable Excel template =====
@@ -74,7 +74,7 @@ router.get('/', async (req, res) => {
       ['', ''],
       ['', 'THE MAGIC: SEVERAL COLUMNS FILL THEMSELVES'],
       ['', 'These columns are AUTO-CALCULATED and locked — do not type in them:'],
-      ['', '   • Layer 2 VSN I-SID (I) — builds itself from Layer + Site + VLAN (e.g. 12 + 10 + 0008 = 12100008)'],
+      ['', '   • Layer 2 VSN I-SID (I) — builds itself from Layer + Site + VLAN (e.g. 2 + 10 + 0008 = 2100008)'],
       ['', '   • I-SID Name (J) — Service Application + VLAN Name (e.g. LHS-Netmgmt)'],
       ['', '   • SwitchName (N) — Service Application + Closet + auto-number (e.g. LHS-MDF1-1; type MDF1 again on another row and you get LHS-MDF1-2). Closets with spaces work too: "MDF A115" becomes LHS-MDF-A115-1.'],
       ['', '   • SiteID (P) — mirrors the Site column'],
@@ -82,14 +82,14 @@ router.get('/', async (req, res) => {
       ['', ''],
       ['', 'HOW TO FILL IT OUT'],
       ['', '1. The GRAY rows (2-5) are a working example — try editing them and watch the green columns react. The ORANGE banner (row 6) marks where the example ends. (The example\'s Location and DistrictName are locked: they let FACE recognize and auto-ignore example rows if you forget to delete them.)'],
-      ['', '2. Enter your real data STARTING AT ROW 7, below the orange banner. One row per switch: Location, Service Application (short site code like LHS), Layer (12), Site (a number), Edge Vlans, Name, Subnet, DeviceType, DefaultGateway, SwitchType (L2/L3), Closet.'],
+      ['', '2. Enter your real data STARTING AT ROW 7, below the orange banner. One row per switch: Location, Service Application (short site code like LHS), Layer (2), Site (a number), Edge Vlans, Name, Subnet, DeviceType, DefaultGateway, SwitchType (L2/L3), Closet.'],
       ['', '3. Watch SwitchName, I-SID, I-SID Name, and MgmtVLAN build themselves as you type.'],
       ['', '4. Extra VLANs for a site go on their own rows: fill Service Application, Layer, Site, Edge Vlans, Name, Subnet, DeviceType — leave Closet/SwitchType blank (no switch on that row). If a VLAN row is missing something the formulas need, the empty cells turn RED.'],
       ['', '5. When your data is in, DELETE the example and banner: select rows 2-6, right-click, Delete Rows.'],
       ['', '6. Save and upload at the FACE portal.'],
       ['', ''],
       ['', 'COLUMN NOTES'],
-      ['', 'Layer — 12 for Layer 2 VSN (most common), 13 for Layer 3 VSN.'],
+      ['', 'Layer — 2 for Layer 2 VSN (most common), 3 for Layer 3 VSN.'],
       ['', 'Site — unique number per site/school (e.g. 10, 20, 43). Drives the I-SID, so keep it unique.'],
       ['', 'Edge Vlans — VLAN ID, 1-4094.'],
       ['', 'Subnet — CIDR, e.g. 10.110.8.0/24. Tip: many districts use 10.(Site+100).(VLAN).0/24 — but enter whatever matches your addressing plan.'],
@@ -176,7 +176,7 @@ router.get('/', async (req, res) => {
       };
 
       setCell('T', `IF(E${r}="","",TEXT(E${r},"0000"))`);
-      setCell('I', `IF(OR(C${r}="",D${r}="",E${r}=""),"",LEFT(C${r},2)&LEFT(D${r},2)&LEFT(T${r},4))`);
+      setCell('I', `IF(OR(C${r}="",D${r}="",E${r}=""),"",LEFT(C${r},1)&LEFT(D${r},2)&LEFT(T${r},4))`);
       setCell('J', `IF(AND(B${r}<>"",F${r}<>""),B${r}&"-"&F${r},"")`);
       // Latest naming logic: closets may contain spaces (become dashes) and
       // won't get double-prefixed if they already start with the site code
@@ -202,9 +202,9 @@ router.get('/', async (req, res) => {
       error: 'Pick data, voice, ap, or camera from the dropdown.'
     });
     ws.dataValidations.add(`C2:C${DATA_ROWS}`, {
-      type: 'list', allowBlank: true, formulae: ['"12,13"'],
+      type: 'list', allowBlank: true, formulae: ['"2,3"'],
       showErrorMessage: true, errorTitle: 'Invalid layer',
-      error: 'Use 12 for Layer 2 VSN or 13 for Layer 3 VSN.'
+      error: 'Use 2 for Layer 2 VSN or 3 for Layer 3 VSN.'
     });
     ws.dataValidations.add(`E2:E${DATA_ROWS}`, {
       type: 'whole', operator: 'between', formulae: [1, 4094], allowBlank: true,
@@ -278,15 +278,15 @@ router.get('/sample', (req, res) => {
     // matches exactly what a real upload produces.
     const rows = [
       // Lincoln High School (site 10): 1 core + 2 access
-      { 'SiteID': 10, 'Location': 'LINCOLN HIGH SCHOOL', 'SwitchName': 'LHS-MDF1-1', 'SwitchType': 'L3', 'Closet': 'MDF1', 'MgmtVLAN': 8, 'DefaultGateway': '10.110.8.1', 'Service Application': 'LHS', 'Edge Vlans': 8, 'Name': 'Netmgmt', 'Subnet': '10.110.8.0/24', 'DeviceType': 'ap', 'Layer 2 VSN I-SID': 12100008, 'I-SID Name': 'LHS-Netmgmt' },
-      { 'SiteID': 10, 'Location': 'LINCOLN HIGH SCHOOL', 'SwitchName': 'LHS-IDF1-1', 'SwitchType': 'L2', 'Closet': 'IDF1', 'MgmtVLAN': 8, 'DefaultGateway': '10.110.8.1', 'Service Application': 'LHS', 'Edge Vlans': 16, 'Name': 'VoIP', 'Subnet': '10.110.16.0/24', 'DeviceType': 'voice', 'Layer 2 VSN I-SID': 12100016, 'I-SID Name': 'LHS-VoIP' },
-      { 'SiteID': 10, 'Location': 'LINCOLN HIGH SCHOOL', 'SwitchName': 'LHS-IDF2-1', 'SwitchType': 'L2', 'Closet': 'IDF2', 'MgmtVLAN': 8, 'DefaultGateway': '10.110.8.1', 'Service Application': 'LHS', 'Edge Vlans': 24, 'Name': 'Data', 'Subnet': '10.110.24.0/24', 'DeviceType': 'data', 'Layer 2 VSN I-SID': 12100024, 'I-SID Name': 'LHS-Data' },
-      { 'SiteID': 10, 'Edge Vlans': 32, 'Name': 'Cameras', 'Subnet': '10.110.32.0/24', 'DeviceType': 'camera', 'Layer 2 VSN I-SID': 12100032, 'I-SID Name': 'LHS-Cameras' },
+      { 'SiteID': 10, 'Location': 'LINCOLN HIGH SCHOOL', 'SwitchName': 'LHS-MDF1-1', 'SwitchType': 'L3', 'Closet': 'MDF1', 'MgmtVLAN': 8, 'DefaultGateway': '10.110.8.1', 'Service Application': 'LHS', 'Edge Vlans': 8, 'Name': 'Netmgmt', 'Subnet': '10.110.8.0/24', 'DeviceType': 'ap', 'Layer 2 VSN I-SID': 2100008, 'I-SID Name': 'LHS-Netmgmt' },
+      { 'SiteID': 10, 'Location': 'LINCOLN HIGH SCHOOL', 'SwitchName': 'LHS-IDF1-1', 'SwitchType': 'L2', 'Closet': 'IDF1', 'MgmtVLAN': 8, 'DefaultGateway': '10.110.8.1', 'Service Application': 'LHS', 'Edge Vlans': 16, 'Name': 'VoIP', 'Subnet': '10.110.16.0/24', 'DeviceType': 'voice', 'Layer 2 VSN I-SID': 2100016, 'I-SID Name': 'LHS-VoIP' },
+      { 'SiteID': 10, 'Location': 'LINCOLN HIGH SCHOOL', 'SwitchName': 'LHS-IDF2-1', 'SwitchType': 'L2', 'Closet': 'IDF2', 'MgmtVLAN': 8, 'DefaultGateway': '10.110.8.1', 'Service Application': 'LHS', 'Edge Vlans': 24, 'Name': 'Data', 'Subnet': '10.110.24.0/24', 'DeviceType': 'data', 'Layer 2 VSN I-SID': 2100024, 'I-SID Name': 'LHS-Data' },
+      { 'SiteID': 10, 'Edge Vlans': 32, 'Name': 'Cameras', 'Subnet': '10.110.32.0/24', 'DeviceType': 'camera', 'Layer 2 VSN I-SID': 2100032, 'I-SID Name': 'LHS-Cameras' },
       // Washington Elementary (site 20): 1 core + 3 access
-      { 'SiteID': 20, 'Location': 'WASHINGTON ELEMENTARY', 'SwitchName': 'WES-MDF1-1', 'SwitchType': 'L3', 'Closet': 'MDF1', 'MgmtVLAN': 8, 'DefaultGateway': '10.120.8.1', 'Service Application': 'WES', 'Edge Vlans': 8, 'Name': 'Netmgmt', 'Subnet': '10.120.8.0/24', 'DeviceType': 'ap', 'Layer 2 VSN I-SID': 12200008, 'I-SID Name': 'WES-Netmgmt' },
-      { 'SiteID': 20, 'Location': 'WASHINGTON ELEMENTARY', 'SwitchName': 'WES-IDF1-1', 'SwitchType': 'L2', 'Closet': 'IDF1', 'MgmtVLAN': 8, 'DefaultGateway': '10.120.8.1', 'Service Application': 'WES', 'Edge Vlans': 16, 'Name': 'VoIP', 'Subnet': '10.120.16.0/24', 'DeviceType': 'voice', 'Layer 2 VSN I-SID': 12200016, 'I-SID Name': 'WES-VoIP' },
-      { 'SiteID': 20, 'Location': 'WASHINGTON ELEMENTARY', 'SwitchName': 'WES-IDF2-1', 'SwitchType': 'L2', 'Closet': 'IDF2', 'MgmtVLAN': 8, 'DefaultGateway': '10.120.8.1', 'Service Application': 'WES', 'Edge Vlans': 24, 'Name': 'Data', 'Subnet': '10.120.24.0/24', 'DeviceType': 'data', 'Layer 2 VSN I-SID': 12200024, 'I-SID Name': 'WES-Data' },
-      { 'SiteID': 20, 'Location': 'WASHINGTON ELEMENTARY', 'SwitchName': 'WES-IDF3-1', 'SwitchType': 'L2', 'Closet': 'IDF3', 'MgmtVLAN': 8, 'DefaultGateway': '10.120.8.1', 'Service Application': 'WES', 'Edge Vlans': 40, 'Name': 'Guest', 'Subnet': '10.120.40.0/24', 'DeviceType': 'data', 'Layer 2 VSN I-SID': 12200040, 'I-SID Name': 'WES-Guest' }
+      { 'SiteID': 20, 'Location': 'WASHINGTON ELEMENTARY', 'SwitchName': 'WES-MDF1-1', 'SwitchType': 'L3', 'Closet': 'MDF1', 'MgmtVLAN': 8, 'DefaultGateway': '10.120.8.1', 'Service Application': 'WES', 'Edge Vlans': 8, 'Name': 'Netmgmt', 'Subnet': '10.120.8.0/24', 'DeviceType': 'ap', 'Layer 2 VSN I-SID': 2200008, 'I-SID Name': 'WES-Netmgmt' },
+      { 'SiteID': 20, 'Location': 'WASHINGTON ELEMENTARY', 'SwitchName': 'WES-IDF1-1', 'SwitchType': 'L2', 'Closet': 'IDF1', 'MgmtVLAN': 8, 'DefaultGateway': '10.120.8.1', 'Service Application': 'WES', 'Edge Vlans': 16, 'Name': 'VoIP', 'Subnet': '10.120.16.0/24', 'DeviceType': 'voice', 'Layer 2 VSN I-SID': 2200016, 'I-SID Name': 'WES-VoIP' },
+      { 'SiteID': 20, 'Location': 'WASHINGTON ELEMENTARY', 'SwitchName': 'WES-IDF2-1', 'SwitchType': 'L2', 'Closet': 'IDF2', 'MgmtVLAN': 8, 'DefaultGateway': '10.120.8.1', 'Service Application': 'WES', 'Edge Vlans': 24, 'Name': 'Data', 'Subnet': '10.120.24.0/24', 'DeviceType': 'data', 'Layer 2 VSN I-SID': 2200024, 'I-SID Name': 'WES-Data' },
+      { 'SiteID': 20, 'Location': 'WASHINGTON ELEMENTARY', 'SwitchName': 'WES-IDF3-1', 'SwitchType': 'L2', 'Closet': 'IDF3', 'MgmtVLAN': 8, 'DefaultGateway': '10.120.8.1', 'Service Application': 'WES', 'Edge Vlans': 40, 'Name': 'Guest', 'Subnet': '10.120.40.0/24', 'DeviceType': 'data', 'Layer 2 VSN I-SID': 2200040, 'I-SID Name': 'WES-Guest' }
     ];
 
     const sheets = { 'Fabric Data': rows };

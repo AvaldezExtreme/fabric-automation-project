@@ -121,7 +121,7 @@ exit
   // All inter-VLAN traffic the fabric denies is hairpinned through here.
   if (segVrf && segVrf.fwVlanId) {
     const fwPrefix = (segVrf.fwSubnet || '').split('/')[1] || '24';
-    const fwIsid = parseInt(`12${String(siteId).padStart(2, '0')}${String(segVrf.fwVlanId).padStart(4, '0')}`);
+    const fwIsid = parseInt(`2${String(siteId).padStart(2, "0")}${String(segVrf.fwVlanId).padStart(4, "0")}`);
     config += `
 ! Firewall link (Segmented VRF unrestricted path)
 vlan create ${segVrf.fwVlanId} name FW-Link type port-mstprstp 0
