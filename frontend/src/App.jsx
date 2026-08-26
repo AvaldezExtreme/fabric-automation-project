@@ -176,7 +176,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.7 (V2608271)',
+      appVersion: 'v2.7.1 (V2608272)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -296,15 +296,14 @@ function App() {
               background: '#7519F9', display: 'flex', alignItems: 'center', justifyContent: 'center',
               color: 'white', fontWeight: 800, fontSize: '20px', fontFamily: "'DM Sans', sans-serif"
             }}>E</div>
-            {/* Wordmark */}
+            {/* Wordmark - FACE's own identity (no product-brand trademarks) */}
             <div style={{ color: 'white', fontSize: '17px', whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>
               <span style={{ fontWeight: 800 }}>Extreme</span>
-              <span style={{ fontWeight: 300, marginLeft: '6px' }}>Platform ONE™</span>
+              <span style={{ fontWeight: 300, marginLeft: '6px' }}>FACE</span>
               <span style={{ opacity: 0.4, margin: '0 10px' }}>|</span>
-              <span style={{ fontWeight: 400 }}>FACE</span>
             </div>
             {/* Context chip */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: '#cfd2d9', fontSize: '13px', fontWeight: 600, marginLeft: '8px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: '#cfd2d9', fontSize: '13px', fontWeight: 600, marginLeft: '0px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
               <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', background: '#f1f5f9', flexShrink: 0 }}>
                 <img src="/icons/fabric.svg" alt="" style={{ width: '14px', height: '14px' }} />
               </span>
@@ -467,7 +466,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.7 (V2608271)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.7.1 (V2608272)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>
