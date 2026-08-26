@@ -176,7 +176,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.6.3 (V2608270)',
+      appVersion: 'v2.7 (V2608271)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -272,81 +272,88 @@ function App() {
   const CurrentComponent = steps[currentStep].component;
   const currentStepData = steps[currentStep];
 
+  // Platform ONE style round header control
+  const headerCircle = {
+    width: '34px', height: '34px', borderRadius: '50%',
+    background: '#3a3d45', color: '#e5e7eb',
+    border: 'none', cursor: 'pointer', fontSize: '15px',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+  };
+
   return (
     <div className="app-container">
-      {/* Header */}
-      <header className="app-header">
-        <div className="header-content">
-          <div className="header-brand">
-            <div className="brand-icon">⚡</div>
-            <div>
-              <h1>FACE - Fabric Auto Configuration Engine</h1>
-              <p>Extreme Networks Switch Configuration & Site Engine Auto-Onboarding</p>
+      {/* Header - Extreme Platform ONE style: flat charcoal bar, wordmark,
+          context chip, round controls. Blends with the corporate portal. */}
+      <header className="app-header" style={{
+        background: '#26282E', padding: '0 20px',
+        borderBottom: '1px solid #3a3d45', boxShadow: 'none'
+      }}>
+        <div className="header-content" style={{ height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+            {/* Logo square */}
+            <div style={{
+              width: '34px', height: '34px', borderRadius: '8px', flexShrink: 0,
+              background: '#7519F9', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontWeight: 800, fontSize: '20px', fontFamily: "'DM Sans', sans-serif"
+            }}>E</div>
+            {/* Wordmark */}
+            <div style={{ color: 'white', fontSize: '17px', whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>
+              <span style={{ fontWeight: 800 }}>Extreme</span>
+              <span style={{ fontWeight: 300, marginLeft: '6px' }}>Platform ONE™</span>
+              <span style={{ opacity: 0.4, margin: '0 10px' }}>|</span>
+              <span style={{ fontWeight: 400 }}>FACE</span>
+            </div>
+            {/* Context chip */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: '#cfd2d9', fontSize: '13px', fontWeight: 600, marginLeft: '8px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', background: '#f1f5f9', flexShrink: 0 }}>
+                <img src="/icons/fabric.svg" alt="" style={{ width: '14px', height: '14px' }} />
+              </span>
+              Fabric Auto Configuration Engine{data.districtName ? ` · ${data.districtName}` : ''}
             </div>
           </div>
-          <div className="header-user">
-            <div className="user-info">
-              <div className="user-name">{user.username}</div>
-              <div className="user-role">Administrator</div>
-            </div>
 
-            {/* Project Save / Open - local files only, nothing stored server-side */}
+          {/* Right controls - flat circles, Platform ONE style */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            {[
+              null // placeholder to keep JSX tidy
+            ] && null}
             <button
               onClick={handleSaveProject}
-              className="theme-toggle-btn"
               title={data.switches.length === 0
                 ? 'Save Project (start a project first)'
                 : 'Save Project to your PC - your data never leaves your machine'}
               disabled={data.switches.length === 0}
-              style={data.switches.length === 0 ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+              style={{ ...headerCircle, opacity: data.switches.length === 0 ? 0.35 : 1, cursor: data.switches.length === 0 ? 'not-allowed' : 'pointer' }}
             >
               💾
             </button>
-            <label
-              className="theme-toggle-btn"
-              title="Open a saved FACE project from your PC"
-              style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-            >
+            <label title="Open a saved FACE project from your PC" style={{ ...headerCircle, cursor: 'pointer' }}>
               📂
-              <input
-                type="file"
-                accept=".json,application/json"
-                onChange={handleOpenProject}
-                style={{ display: 'none' }}
-              />
+              <input type="file" accept=".json,application/json" onChange={handleOpenProject} style={{ display: 'none' }} />
             </label>
 
-            {/* Theme Selector */}
             <div className="theme-selector-wrapper">
-              <button 
-                onClick={() => setShowThemeMenu(!showThemeMenu)}
-                className="theme-toggle-btn"
-                title="Change theme"
-              >
+              <button onClick={() => setShowThemeMenu(!showThemeMenu)} title="Change theme" style={headerCircle}>
                 {theme === 'dark' ? '🌙' : '☀️'}
               </button>
               {showThemeMenu && (
                 <div className="theme-menu">
-                  <button
-                    onClick={() => handleThemeChange('light')}
-                    className={`theme-option ${theme === 'light' ? 'active' : ''}`}
-                  >
-                    <span className="theme-icon">☀️</span>
-                    <span>Light</span>
+                  <button onClick={() => handleThemeChange('light')} className={`theme-option ${theme === 'light' ? 'active' : ''}`}>
+                    <span className="theme-icon">☀️</span><span>Light</span>
                   </button>
-                  <button
-                    onClick={() => handleThemeChange('dark')}
-                    className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
-                  >
-                    <span className="theme-icon">🌙</span>
-                    <span>Dark</span>
+                  <button onClick={() => handleThemeChange('dark')} className={`theme-option ${theme === 'dark' ? 'active' : ''}`}>
+                    <span className="theme-icon">🌙</span><span>Dark</span>
                   </button>
                 </div>
               )}
             </div>
 
-            <button onClick={handleLogout} className="logout-btn">
-              🚪 Sign Out
+            <a href="mailto:support@extremenetworks.com" title="Help & support" style={{ ...headerCircle, textDecoration: 'none', fontWeight: 700, fontSize: '15px' }}>?</a>
+
+            <button onClick={handleLogout} title={`Sign out ${user.username}`} style={{
+              ...headerCircle, background: '#e5e7eb', color: '#26282E', fontWeight: 700, fontSize: '13px'
+            }}>
+              {(user.username || 'U').substring(0, 2).toUpperCase()}
             </button>
           </div>
         </div>
@@ -460,7 +467,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.6.3 (V2608270)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.7 (V2608271)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>

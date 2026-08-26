@@ -16,7 +16,7 @@ const BRAND = {
 // Vertical presets: terminology + seeded VLAN service sets
 const VERTICALS = {
   'K-12': {
-    icon: '🏫', siteNoun: 'School',
+    icon: '/icons/k12.svg', siteNoun: 'School',
     services: [
       { vlanId: 8, name: 'Netmgmt', deviceType: 'ap' },
       { vlanId: 16, name: 'VoIP', deviceType: 'voice' },
@@ -26,7 +26,7 @@ const VERTICALS = {
     ]
   },
   'Higher-Ed': {
-    icon: '🎓', siteNoun: 'Campus Building',
+    icon: '/icons/higher-ed.svg', siteNoun: 'Campus Building',
     services: [
       { vlanId: 8, name: 'Netmgmt', deviceType: 'ap' },
       { vlanId: 16, name: 'VoIP', deviceType: 'voice' },
@@ -37,7 +37,7 @@ const VERTICALS = {
     ]
   },
   'S&L': {
-    icon: '🏛️', siteNoun: 'Office',
+    icon: '/icons/sl-gov.svg', siteNoun: 'Office',
     services: [
       { vlanId: 8, name: 'Netmgmt', deviceType: 'ap' },
       { vlanId: 16, name: 'VoIP', deviceType: 'voice' },
@@ -47,7 +47,7 @@ const VERTICALS = {
     ]
   },
   'Enterprise': {
-    icon: '🏢', siteNoun: 'Branch',
+    icon: '/icons/enterprise.svg', siteNoun: 'Branch',
     services: [
       { vlanId: 8, name: 'Netmgmt', deviceType: 'ap' },
       { vlanId: 16, name: 'VoIP', deviceType: 'voice' },
@@ -294,7 +294,7 @@ function Wizard({ onComplete, onCancel }) {
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {Object.entries(VERTICALS).map(([key, v]) => (
                 <div key={key} style={S.pickCard(vertical === key)} onClick={() => pickVertical(key)}>
-                  <div style={{ fontSize: '1.8rem' }}>{v.icon}</div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '54px', height: '54px', borderRadius: '50%', background: '#f1f5f9', pointerEvents: 'none' }}><img src={v.icon} alt={key} style={{ width: '34px', height: '34px' }} /></span>
                   <div style={{ fontWeight: 700 }}>{key}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{v.services.length} VLANs pre-seeded</div>
                 </div>
