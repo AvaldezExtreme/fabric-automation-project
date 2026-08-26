@@ -361,7 +361,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.3.1 (V2608262)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.4 (V2608263)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>

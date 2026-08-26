@@ -2,7 +2,11 @@ export const generateL3Config = (switchData, settings = {}) => {
   const siteId = switchData.siteId;
   const switchName = switchData.name;
   const isidPrefix = switchData.isidPrefix;
-  const mgmtClipIp = `${siteId}.1.1.1/32`;
+  // Routed-closet designs carry a real per-switch loopback (from the Ports
+  // column); it becomes the CLIP. Site-wide designs keep the legacy scheme.
+  const mgmtClipIp = switchData.loopback
+    ? `${switchData.loopback}/32`
+    : `${siteId}.1.1.1/32`;
   
   // Use user input or default to 0.0.0.0
   const defaultGateway = settings.l3DefaultGateway || '0.0.0.0';
@@ -44,9 +48,18 @@ prompt ${switchName}
     config += `i-sid name ${vlan.isid} ${vlan.isidName}\n`;
   });
   
-  // VLAN interfaces with DHCP relay
+  // VLAN interfaces with DHCP relay.
+  // Routed-access switches (York-style closet routing) only route their own
+  // closet's VLANs - site-wide VLANs (e.g. wireless L2 VSNs) stay L2-only
+  // here, because their gateway lives elsewhere. Giving every closet an IP
+  // on a shared subnet would create district-wide duplicate addresses.
+  const l2OnlyVlans = [];
   config += '\n! Configure VLAN Interfaces\n';
   vlansToConfig.forEach(vlan => {
+    if (switchData.routedAccess && !vlan.closet) {
+      l2OnlyVlans.push(vlan.vlanId);
+      return;
+    }
     const subnet = vlan.subnet;
     if (subnet && subnet !== 'NaN' && subnet.toLowerCase() !== 'nan') {
       const [network, cidr] = subnet.split('/');
@@ -69,7 +82,11 @@ exit
       }
     }
   });
-  
+
+  if (l2OnlyVlans.length > 0) {
+    config += `\n! Site-wide L2 VSNs carried without IP on this switch: VLAN ${l2OnlyVlans.join(', ')}\n`;
+  }
+
   // Management clip
   config += `
 ! Management CLIP

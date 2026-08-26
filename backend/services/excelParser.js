@@ -277,6 +277,13 @@ allRows.forEach(({ row }) => {
   const defaultGw = sanitizeInput(row['DefaultGateway']?.toString() || '');
   const closet = sanitizeInput(row['Closet']?.toString() || '');
   const mgmtVlan = row['MgmtVLAN'];
+
+  // Optional per-switch loopback carried in the Ports column as
+  // "Loopback x.x.x.x" (routed-closet designs like York 1) - becomes the
+  // switch's CLIP address in generated configs
+  const portsField = sanitizeInput(row['Ports']?.toString() || '');
+  const loopbackMatch = portsField.match(/loopback\s+((?:\d{1,3}\.){3}\d{1,3})/i);
+  const loopback = loopbackMatch ? loopbackMatch[1] : null;
   
   const switchKey = `${switchName}|${siteId}|${switchType}`;
   
@@ -299,6 +306,7 @@ allRows.forEach(({ row }) => {
       mgmtVlan: mgmtVlan,
       defaultGateway: defaultGw,
       closet: closet,
+      loopback: loopback,
       mgmtIpOctet: currentOctet,  // Per-site sequential!
       vlans: [],
       isidPrefix: extractIsidPrefix(serviceApp),
