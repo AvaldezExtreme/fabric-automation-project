@@ -135,28 +135,34 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
     borderRadius: '6px', fontSize: '0.85rem'
   };
 
+  // Switch row + (when selected) its details card INLINE right below it,
+  // so there's no scrolling to the bottom of a long hierarchy to see them
   const renderSwitchItem = (sw) => (
-    <div
-      key={sw.name}
-      className="switch-item"
-      onClick={() => {
-        if (editing && !window.confirm('You have an unsaved edit in progress.\n\n• OK = switch anyway (your edit will be lost)\n• Cancel = stay so you can 💾 Save or Cancel first')) return;
-        setSelectedName(sw.name); setEditingState(false); setDraft(null);
-      }}
-      style={{
-        cursor: 'pointer',
-        padding: '0.75rem',
-        margin: '0.25rem 0',
-        background: selectedName === sw.name ? 'rgba(117, 25, 249, 0.18)' : 'var(--canvas-bg)',
-        borderRadius: '0.5rem',
-        border: '1px solid var(--border-color)'
-      }}
-    >
-      <strong>{sw.name}</strong>
-      <span style={{ marginLeft: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-        {sw.type} • {sw.vlans?.length || 0} VLANs{sw.closet ? ` • Closet: ${sw.closet}` : ''}
-      </span>
-    </div>
+    <React.Fragment key={sw.name}>
+      <div
+        className="switch-item"
+        onClick={() => {
+          if (editing && !window.confirm('You have an unsaved edit in progress.\n\n• OK = switch anyway (your edit will be lost)\n• Cancel = stay so you can 💾 Save or Cancel first')) return;
+          if (selectedName === sw.name) { setSelectedName(null); return; }
+          setSelectedName(sw.name); setEditingState(false); setDraft(null);
+        }}
+        style={{
+          cursor: 'pointer',
+          padding: '0.75rem',
+          margin: '0.25rem 0',
+          background: selectedName === sw.name ? 'rgba(117, 25, 249, 0.18)' : 'var(--canvas-bg)',
+          borderRadius: '0.5rem',
+          border: selectedName === sw.name ? '1px solid var(--extreme-violet)' : '1px solid var(--border-color)'
+        }}
+      >
+        <strong>{sw.name}</strong>
+        <span style={{ marginLeft: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+          {sw.type} • {sw.vlans?.length || 0} VLANs{sw.closet ? ` • Closet: ${sw.closet}` : ''}
+          {selectedName !== sw.name && <span style={{ marginLeft: '0.5rem', color: 'var(--extreme-violet)' }}>▸ click to inspect</span>}
+        </span>
+      </div>
+      {selectedName === sw.name && renderDetails()}
+    </React.Fragment>
   );
 
   return (
@@ -237,10 +243,27 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
         </div>
       </div>
 
-      {selectedSwitch && (
-        <div style={{ marginBottom: '2rem' }}>
+      <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '0.5rem', marginBottom: '2rem', color: '#92400e' }}>
+        <strong>💡 Tip:</strong> Click any switch to inspect it right where it sits — use ✏️ Edit to fix names, VLANs, subnets, or I-SIDs. Your edits flow into the generated configs.
+      </div>
+
+      <button onClick={handleNext} className="btn btn-primary" disabled={editing}>
+        ✓ Generate Configurations
+      </button>
+      {editing && (
+        <span style={{ marginLeft: '12px', fontSize: '0.85rem', color: '#92400e' }}>
+          Save or cancel your edit first
+        </span>
+      )}
+    </div>
+  );
+
+  // ---------- inline details card (rendered under the selected switch) ----------
+  function renderDetails() {
+    return (
+        <div style={{ margin: '0.25rem 0 1rem 1rem', padding: '1rem', background: 'var(--card-bg)', border: '1px solid var(--extreme-violet)', borderRadius: '0.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3>📊 Switch Details: {selectedSwitch.name}</h3>
+            <h3 style={{ margin: 0 }}>📊 Switch Details: {selectedSwitch.name}</h3>
             {!editing ? (
               <button onClick={startEdit} className="btn btn-primary" style={{ padding: '8px 18px' }}>
                 ✏️ Edit
@@ -352,22 +375,8 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
             )}
           </div>
         </div>
-      )}
-
-      <div style={{ background: '#fef3c7', padding: '1rem', borderRadius: '0.5rem', marginBottom: '2rem' }}>
-        <strong>💡 Tip:</strong> Click any switch to inspect it — use ✏️ Edit to fix names, VLANs, subnets, or I-SIDs right here. Your edits flow into the generated configs.
-      </div>
-
-      <button onClick={handleNext} className="btn btn-primary" disabled={editing}>
-        ✓ Generate Configurations
-      </button>
-      {editing && (
-        <span style={{ marginLeft: '12px', fontSize: '0.85rem', color: '#92400e' }}>
-          Save or cancel your edit first
-        </span>
-      )}
-    </div>
-  );
+    );
+  }
 }
 
 export default Review;

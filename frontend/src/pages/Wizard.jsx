@@ -245,7 +245,7 @@ function Wizard({ onComplete, onCancel }) {
     pickCard: (active) => ({
       flex: '1 1 160px', padding: '16px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center',
       border: active ? `2px solid ${BRAND.violet}` : '1px solid var(--border-color)',
-      background: active ? 'rgba(117,25,249,0.15)' : 'white', boxShadow: active ? '0 4px 12px rgba(117,25,249,0.25)' : 'none'
+      background: active ? 'rgba(117,25,249,0.15)' : 'var(--card-bg)', color: 'var(--text-primary)', boxShadow: active ? '0 4px 12px rgba(117,25,249,0.25)' : 'none'
     }),
     input: { padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '0.9rem', width: '100%', background: 'var(--card-bg)', color: 'var(--text-primary)' },
     smallInput: { padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '0.9rem', width: '90px', background: 'var(--card-bg)', color: 'var(--text-primary)' },
@@ -312,7 +312,7 @@ function Wizard({ onComplete, onCancel }) {
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {ARCHITECTURES.map(a => (
                 <div key={a.key} style={S.pickCard(architecture === a.key)} onClick={() => setArchitecture(a.key)}>
-                  <img src={a.icon} alt={a.title} style={{ width: '42px', height: '42px', pointerEvents: 'none' }} />
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '54px', height: '54px', borderRadius: '50%', background: '#f1f5f9', pointerEvents: 'none' }}><img src={a.icon} alt={a.title} style={{ width: '34px', height: '34px' }} /></span>
                   <div style={{ fontWeight: 700 }}>{a.title}</div>
                   <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{a.desc}</div>
                 </div>
@@ -578,7 +578,7 @@ function SegVrfPreview({ services, classes, fwVlan }) {
 
       {/* Core (official Extreme switch icon) */}
       <rect x={510} y={coreY - 40} width={140} height={80} rx="12" fill="#00CC99" stroke="#fff" strokeWidth="1.5" />
-      <image href="/icons/switch.svg" x={522} y={coreY - 32} width="28" height="28" />
+      <rect x={517} y={coreY - 37} width="38" height="38" rx="8" fill="#f1f5f9" /><image href="/icons/switch.svg" x={522} y={coreY - 32} width="28" height="28" />
       <text x={592} y={coreY - 12} textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">L3 CORE</text>
       <text x={580} y={coreY + 8} textAnchor="middle" fontSize="9.5" fill="#eafff7">Segmented VRF</text>
       <text x={580} y={coreY + 24} textAnchor="middle" fontSize="9.5" fill="#eafff7">default GW for all</text>
@@ -592,7 +592,7 @@ function SegVrfPreview({ services, classes, fwVlan }) {
 
       {/* Firewall (official Extreme firewall icon) */}
       <rect x={740} y={coreY - 35} width={100} height={70} rx="12" fill="#FF3333" stroke="#fff" strokeWidth="1.5" />
-      <image href="/icons/firewall.svg" x={752} y={coreY - 26} width="26" height="26" />
+      <rect x={747} y={coreY - 31} width="36" height="36" rx="8" fill="#f1f5f9" /><image href="/icons/firewall.svg" x={752} y={coreY - 26} width="26" height="26" />
       <text x={806} y={coreY - 7} textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">FW</text>
       <text x={790} y={coreY + 16} textAnchor="middle" fontSize="8.5" fill="#ffe4e6">decides east-west</text>
 
