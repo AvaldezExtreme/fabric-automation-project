@@ -176,7 +176,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.7.1 (V2608272)',
+      appVersion: 'v2.7.2 (V2608273)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -272,11 +272,22 @@ function App() {
   const CurrentComponent = steps[currentStep].component;
   const currentStepData = steps[currentStep];
 
-  // Platform ONE style round header control
+  // Platform ONE style header - follows the app theme (charcoal in dark,
+  // clean light bar in light) and sized to match the EP1 portal bar
+  const hdrDark = theme === 'dark';
+  const headerBarStyle = {
+    background: hdrDark ? '#26282E' : '#ffffff',
+    padding: '0 24px',
+    borderBottom: `1px solid ${hdrDark ? '#3a3d45' : '#e5e7eb'}`,
+    boxShadow: hdrDark ? 'none' : '0 1px 3px rgba(0,0,0,0.06)'
+  };
+  const wordmarkColor = hdrDark ? 'white' : '#1f2937';
+  const chipColor = hdrDark ? '#cfd2d9' : '#4b5563';
   const headerCircle = {
-    width: '34px', height: '34px', borderRadius: '50%',
-    background: '#3a3d45', color: '#e5e7eb',
-    border: 'none', cursor: 'pointer', fontSize: '15px',
+    width: '40px', height: '40px', borderRadius: '50%',
+    background: hdrDark ? '#3a3d45' : '#f3f4f6',
+    color: hdrDark ? '#e5e7eb' : '#374151',
+    border: 'none', cursor: 'pointer', fontSize: '17px',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
   };
 
@@ -284,28 +295,25 @@ function App() {
     <div className="app-container">
       {/* Header - Extreme Platform ONE style: flat charcoal bar, wordmark,
           context chip, round controls. Blends with the corporate portal. */}
-      <header className="app-header" style={{
-        background: '#26282E', padding: '0 20px',
-        borderBottom: '1px solid #3a3d45', boxShadow: 'none'
-      }}>
-        <div className="header-content" style={{ height: '56px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+      <header className="app-header" style={headerBarStyle}>
+        <div className="header-content" style={{ height: '68px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0 }}>
             {/* Logo square */}
             <div style={{
-              width: '34px', height: '34px', borderRadius: '8px', flexShrink: 0,
+              width: '42px', height: '42px', borderRadius: '10px', flexShrink: 0,
               background: '#7519F9', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 800, fontSize: '20px', fontFamily: "'DM Sans', sans-serif"
+              color: 'white', fontWeight: 800, fontSize: '25px', fontFamily: "'DM Sans', sans-serif"
             }}>E</div>
             {/* Wordmark - FACE's own identity (no product-brand trademarks) */}
-            <div style={{ color: 'white', fontSize: '17px', whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>
+            <div style={{ color: wordmarkColor, fontSize: '20px', whiteSpace: 'nowrap', letterSpacing: '0.2px' }}>
               <span style={{ fontWeight: 800 }}>Extreme</span>
-              <span style={{ fontWeight: 300, marginLeft: '6px' }}>FACE</span>
-              <span style={{ opacity: 0.4, margin: '0 10px' }}>|</span>
+              <span style={{ fontWeight: 300, marginLeft: '7px' }}>FACE</span>
+              <span style={{ opacity: 0.4, margin: '0 12px' }}>|</span>
             </div>
             {/* Context chip */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: '#cfd2d9', fontSize: '13px', fontWeight: 600, marginLeft: '0px', whiteSpace: 'nowrap', overflow: 'hidden' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '22px', height: '22px', borderRadius: '50%', background: '#f1f5f9', flexShrink: 0 }}>
-                <img src="/icons/fabric.svg" alt="" style={{ width: '14px', height: '14px' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: chipColor, fontSize: '14.5px', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '26px', height: '26px', borderRadius: '50%', background: '#f1f5f9', border: hdrDark ? 'none' : '1px solid #e5e7eb', flexShrink: 0 }}>
+                <img src="/icons/fabric.svg" alt="" style={{ width: '16px', height: '16px' }} />
               </span>
               Fabric Auto Configuration Engine{data.districtName ? ` · ${data.districtName}` : ''}
             </div>
@@ -350,7 +358,10 @@ function App() {
             <a href="mailto:support@extremenetworks.com" title="Help & support" style={{ ...headerCircle, textDecoration: 'none', fontWeight: 700, fontSize: '15px' }}>?</a>
 
             <button onClick={handleLogout} title={`Sign out ${user.username}`} style={{
-              ...headerCircle, background: '#e5e7eb', color: '#26282E', fontWeight: 700, fontSize: '13px'
+              ...headerCircle,
+              background: hdrDark ? '#e5e7eb' : '#26282E',
+              color: hdrDark ? '#26282E' : '#ffffff',
+              fontWeight: 700, fontSize: '14px'
             }}>
               {(user.username || 'U').substring(0, 2).toUpperCase()}
             </button>
@@ -466,7 +477,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.7.1 (V2608272)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.7.2 (V2608273)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>
