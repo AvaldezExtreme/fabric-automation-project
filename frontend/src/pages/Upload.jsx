@@ -7,6 +7,7 @@
 
 import React, { useState } from 'react';
 import tokenService from '../services/tokenService.js';
+import Wizard from './Wizard.jsx';
 
 function Upload({ onNext, onError }) {
   const [loading, setLoading] = useState(false);
@@ -15,6 +16,11 @@ function Upload({ onNext, onError }) {
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [loadingSample, setLoadingSample] = useState(false);
   const [parseResult, setParseResult] = useState(null);
+  const [wizardMode, setWizardMode] = useState(false);
+
+  if (wizardMode) {
+    return <Wizard onComplete={onNext} onCancel={() => setWizardMode(false)} />;
+  }
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -204,6 +210,16 @@ function Upload({ onNext, onError }) {
           }}
         >
           {loadingSample ? '⏳ Loading…' : '✨ Try Sample Data'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setWizardMode(true)}
+          style={{
+            padding: '10px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
+            background: 'linear-gradient(135deg, #7D76F2, #5B059C)', color: 'white', fontWeight: 600
+          }}
+        >
+          🧙 Start From Scratch
         </button>
       </div>
 

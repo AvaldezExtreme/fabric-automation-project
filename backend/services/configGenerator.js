@@ -48,6 +48,35 @@ prompt ${switchName}
     config += `i-sid name ${vlan.isid} ${vlan.isidName}\n`;
   });
   
+  // Segmented VRF (Fabric Engine 9.4+, from the intake wizard).
+  // Member interfaces get a trust class: trusted (default), untrusted, or
+  // unrestricted (the FW link). Syntax per the Segmented VRF reference decks.
+  const segVrf = settings.segmentedVrf && settings.segmentedVrf.enabled ? settings.segmentedVrf : null;
+  const vrfClassFor = (vlan) => {
+    if (!segVrf) return null;
+    const cls = (segVrf.classes || {})[vlan.vlanId];
+    return cls === 'untrusted' ? 'untrusted' : 'trusted';
+  };
+
+  if (segVrf) {
+    const isidBase = 3000000 + (parseInt(segVrf.vrfId) || 10) * 10;
+    config += `! Segmented VRF (Fabric Engine 9.4+) - Premier license required
+ip vrf ${segVrf.vrfName} vrfid ${segVrf.vrfId}
+router vrf ${segVrf.vrfName}
+segmented
+ipvpn
+i-sid ${isidBase}
+i-sid ${isidBase + 1} untrusted
+i-sid ${isidBase + 2} unrestricted
+ipvpn enable
+isis redistribute direct
+isis redistribute direct enable
+exit
+isis apply redistribute direct vrf ${segVrf.vrfName}
+
+`;
+  }
+
   // VLAN interfaces with DHCP relay.
   // Routed-access switches (York-style closet routing) only route their own
   // closet's VLANs - site-wide VLANs (e.g. wireless L2 VSNs) stay L2-only
@@ -68,9 +97,10 @@ prompt ${switchName}
         const netmask = cidrToNetmask(cidr);
         const gatewayIp = `${octets[0]}.${octets[1]}.${octets[2]}.1`;
         
+        const vrfLine = segVrf ? `vrf ${segVrf.vrfName}${vrfClassFor(vlan) === 'untrusted' ? ' untrusted' : ''}\n` : '';
         config += `
 interface vlan ${vlan.vlanId}
-ip address ${gatewayIp} ${netmask}
+${vrfLine}ip address ${gatewayIp} ${netmask}
 ip spb-multicast enable
 ip igmp upnp-filter
 ip dhcp-relay
@@ -85,6 +115,28 @@ exit
 
   if (l2OnlyVlans.length > 0) {
     config += `\n! Site-wide L2 VSNs carried without IP on this switch: VLAN ${l2OnlyVlans.join(', ')}\n`;
+  }
+
+  // Segmented VRF firewall link: the UNRESTRICTED path (L3 core <-> FW).
+  // All inter-VLAN traffic the fabric denies is hairpinned through here.
+  if (segVrf && segVrf.fwVlanId) {
+    const fwPrefix = (segVrf.fwSubnet || '').split('/')[1] || '24';
+    const fwIsid = parseInt(`12${String(siteId).padStart(2, '0')}${String(segVrf.fwVlanId).padStart(4, '0')}`);
+    config += `
+! Firewall link (Segmented VRF unrestricted path)
+vlan create ${segVrf.fwVlanId} name FW-Link type port-mstprstp 0
+vlan i-sid ${segVrf.fwVlanId} ${fwIsid}
+interface vlan ${segVrf.fwVlanId}
+vrf ${segVrf.vrfName} unrestricted
+ip address ${segVrf.switchIp} ${cidrToNetmask(fwPrefix)}
+exit
+
+! Default route inside the VRF - towards the firewall
+router vrf ${segVrf.vrfName}
+ip route 0.0.0.0 0.0.0.0 ${segVrf.fwIp} weight 1
+exit
+
+`;
   }
 
   // Management clip
