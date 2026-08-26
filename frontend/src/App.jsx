@@ -160,7 +160,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.5 (V2608264)',
+      appVersion: 'v2.5.1 (V2608265)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -441,6 +441,7 @@ function App() {
               onBack={handleStepBack}
               onReset={handleReset}
               onError={handleError}
+              onUpdate={(newData) => setData(newData)}
             />
           </div>
         </main>
@@ -449,7 +450,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.5 (V2608264)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.5.1 (V2608265)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>

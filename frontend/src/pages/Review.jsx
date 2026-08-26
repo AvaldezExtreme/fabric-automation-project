@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import { isMdfSwitch, buildClosetTopology } from '../utils/closetTopology.js';
 
-function Review({ data, onNext, onError }) {
+function Review({ data, onNext, onError, onUpdate }) {
   const [switches, setSwitches] = useState(data.switches);
   const [selectedName, setSelectedName] = useState(null);
   const [editing, setEditing] = useState(false);
@@ -59,7 +59,7 @@ function Review({ data, onNext, onError }) {
       }
     }
 
-    setSwitches(prev => prev.map(sw => {
+    const updated = switches.map(sw => {
       // The edited switch: apply field + VLAN changes
       if (sw.name === orig.name && sw.siteId === orig.siteId) {
         return {
@@ -89,7 +89,12 @@ function Review({ data, onNext, onError }) {
         };
       }
       return sw;
-    }));
+    });
+
+    setSwitches(updated);
+    // Push edits to app state immediately so Save Project and later steps
+    // see them without requiring 'Generate Configurations' first
+    if (onUpdate) onUpdate({ ...data, switches: updated });
 
     setSelectedName(draft.name.trim() || orig.name);
     setEditing(false);

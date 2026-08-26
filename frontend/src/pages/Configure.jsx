@@ -2,15 +2,19 @@ import React, { useState } from 'react';
 import BulkImportModal from '../components/BulkImportModal';
 
 function Configure({ data, onNext, onError }) {
-  const [serialMap, setSerialMap] = useState({});
-  const [skipSerials, setSkipSerials] = useState(false);
-  const [serialMode, setSerialMode] = useState(null); // null, 'manual', 'bulk'
+  // Initialize from saved/previous data so revisiting this step (or resuming
+  // a saved project) shows the serials and settings already entered
+  const hasSavedSerials = data.serialMap && Object.keys(data.serialMap).length > 0;
+  const [serialMap, setSerialMap] = useState(hasSavedSerials ? data.serialMap : {});
+  const [skipSerials, setSkipSerials] = useState(data.skipSerials || false);
+  const [serialMode, setSerialMode] = useState(hasSavedSerials ? 'manual' : null); // null, 'manual', 'bulk'
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [settings, setSettings] = useState({
     dhcpServer1: '10.1.1.202',
     dhcpServer2: '10.1.1.207',
     wanLinkIp: '',
-    wanLinkNetmask: ''
+    wanLinkNetmask: '',
+    ...(data.settings || {})
   });
 
   const handleSerialChange = (switchName, value) => {
