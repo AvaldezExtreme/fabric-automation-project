@@ -18,8 +18,10 @@ function App() {
   const [user, setUser] = useState(null);
   const [currentStep, setCurrentStep] = useState(0);
   const [theme, setTheme] = useState(() => {
-    // Get theme from localStorage or default to 'light'
-    return localStorage.getItem('app-theme') || 'light';
+    // Get theme from localStorage or default to 'light'.
+    // 'extreme' theme retired - migrate anyone who had it selected.
+    const saved = localStorage.getItem('app-theme');
+    return saved === 'dark' ? 'dark' : 'light';
   });
   const [showThemeMenu, setShowThemeMenu] = useState(false);
   const [data, setData] = useState({
@@ -174,7 +176,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.6.1 (V2608268)',
+      appVersion: 'v2.6.2 (V2608269)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -321,7 +323,7 @@ function App() {
                 className="theme-toggle-btn"
                 title="Change theme"
               >
-                {theme === 'dark' ? '🌙' : theme === 'light' ? '☀️' : '⚡'}
+                {theme === 'dark' ? '🌙' : '☀️'}
               </button>
               {showThemeMenu && (
                 <div className="theme-menu">
@@ -338,14 +340,6 @@ function App() {
                   >
                     <span className="theme-icon">🌙</span>
                     <span>Dark</span>
-                  </button>
-                  <button
-                    onClick={() => handleThemeChange('extreme')}
-                    className={`theme-option ${theme === 'extreme' ? 'active' : ''}`}
-                    title="Coming soon"
-                  >
-                    <span className="theme-icon">⚡</span>
-                    <span>Extreme</span>
                   </button>
                 </div>
               )}
@@ -466,7 +460,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.6.1 (V2608268)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.6.2 (V2608269)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>

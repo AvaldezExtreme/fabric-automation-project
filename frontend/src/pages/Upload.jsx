@@ -179,13 +179,13 @@ function Upload({ onNext, onError }) {
       {/* Template & Sample toolbar */}
       <div style={{
         display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center',
-        background: 'linear-gradient(135deg, #faf8fd, #f3edfb)',
-        border: '1px solid #e9defa', borderRadius: '10px',
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border-color)', borderRadius: '10px',
         padding: '14px 16px', marginBottom: '1.5rem'
       }}>
         <div style={{ flex: '1 1 300px' }}>
-          <strong style={{ color: '#5B059C' }}>New customer?</strong>
-          <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+          <strong style={{ color: 'var(--extreme-violet)' }}>New customer?</strong>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
             Download the fillable template (with instructions and dropdowns), or explore the app with sample data.
           </div>
         </div>
@@ -287,7 +287,7 @@ function Upload({ onNext, onError }) {
                 >
                   Continue Anyway →
                 </button>
-                <span style={{ fontSize: '0.8rem', color: '#888' }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
                   or fix the rows above in Excel and re-upload
                 </span>
               </div>

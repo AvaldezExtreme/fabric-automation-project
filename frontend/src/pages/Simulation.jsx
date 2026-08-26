@@ -258,7 +258,7 @@ function Validation({ data, onNext, onBack, onReset }) {
           onClick={onBack}
           style={{
             padding: '0.75rem 1.5rem',
-            background: '#e5e7eb',
+            background: 'var(--canvas-bg)', color: 'var(--text-primary)',
             border: 'none',
             borderRadius: '6px',
             cursor: 'pointer',

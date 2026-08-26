@@ -58,10 +58,11 @@ const VERTICALS = {
   }
 };
 
+// Official Extreme Networks icons (Icon-Library-2025)
 const ARCHITECTURES = [
-  { key: 'single', icon: '🕸️', title: 'One Fabric', desc: 'Dark fiber between sites - one fabric across the district. I-SIDs unique everywhere.' },
-  { key: 'siloed', icon: '🏝️', title: 'Siloed Fabrics', desc: 'ISP between sites - each site is its own fabric island.' },
-  { key: 'extend', icon: '🌉', title: 'Fabric Extend', desc: 'Extend the fabric across an ISP between sites.' }
+  { key: 'single', icon: '/icons/fabric.svg', title: 'One Fabric', desc: 'Dark fiber between sites - one fabric across the district. I-SIDs unique everywhere.' },
+  { key: 'siloed', icon: '/icons/cloud-local.svg', title: 'Siloed Fabrics', desc: 'ISP between sites - each site is its own fabric island.' },
+  { key: 'extend', icon: '/icons/cloud-mesh.svg', title: 'Fabric Extend', desc: 'Extend the fabric across an ISP between sites.' }
 ];
 
 // VLANs whose name/type suggests they should be Untrusted under Segmented VRF
@@ -240,20 +241,20 @@ function Wizard({ onComplete, onCancel }) {
 
   // ---------- styles ----------
   const S = {
-    card: { background: 'white', border: '1px solid #e9defa', borderRadius: '10px', padding: '18px', marginBottom: '14px' },
+    card: { background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '18px', marginBottom: '14px' },
     pickCard: (active) => ({
       flex: '1 1 160px', padding: '16px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center',
-      border: active ? `2px solid ${BRAND.violet}` : '1px solid #e0e0e0',
-      background: active ? '#f6effe' : 'white', boxShadow: active ? '0 4px 12px rgba(117,25,249,0.25)' : 'none'
+      border: active ? `2px solid ${BRAND.violet}` : '1px solid var(--border-color)',
+      background: active ? 'rgba(117,25,249,0.15)' : 'white', boxShadow: active ? '0 4px 12px rgba(117,25,249,0.25)' : 'none'
     }),
-    input: { padding: '8px 10px', border: '1px solid #d1b8f0', borderRadius: '6px', fontSize: '0.9rem', width: '100%' },
-    smallInput: { padding: '8px 10px', border: '1px solid #d1b8f0', borderRadius: '6px', fontSize: '0.9rem', width: '90px' },
+    input: { padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '0.9rem', width: '100%', background: 'var(--card-bg)', color: 'var(--text-primary)' },
+    smallInput: { padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '6px', fontSize: '0.9rem', width: '90px', background: 'var(--card-bg)', color: 'var(--text-primary)' },
     btn: { padding: '10px 22px', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, background: `linear-gradient(135deg, ${BRAND.violet}, ${BRAND.purple})`, color: 'white' },
-    btnGhost: { padding: '10px 22px', border: '1px solid #ccc', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, background: 'white', color: '#444' },
-    addBtn: { padding: '6px 14px', border: `1px dashed ${BRAND.violet}`, borderRadius: '6px', cursor: 'pointer', background: '#faf8fd', color: BRAND.purple, fontWeight: 600, fontSize: '0.85rem' },
+    btnGhost: { padding: '10px 22px', border: '1px solid #ccc', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, background: 'var(--card-bg)', color: 'var(--text-primary)' },
+    addBtn: { padding: '6px 14px', border: `1px dashed ${BRAND.violet}`, borderRadius: '6px', cursor: 'pointer', background: 'var(--card-bg)', color: 'var(--extreme-violet)', fontWeight: 600, fontSize: '0.85rem' },
     del: { border: 'none', background: '#fee2e2', color: '#b91c1c', borderRadius: '6px', width: '28px', height: '28px', cursor: 'pointer', fontWeight: 700 },
-    th: { textAlign: 'left', padding: '6px 8px', fontSize: '0.8rem', color: BRAND.purple },
-    label: { fontSize: '0.8rem', fontWeight: 700, color: BRAND.purple, display: 'block', marginBottom: '4px' }
+    th: { textAlign: 'left', padding: '6px 8px', fontSize: '0.8rem', color: 'var(--extreme-violet)' },
+    label: { fontSize: '0.8rem', fontWeight: 700, color: 'var(--extreme-violet)', display: 'block', marginBottom: '4px' }
   };
 
   const stepDots = (
@@ -262,7 +263,7 @@ function Wizard({ onComplete, onCancel }) {
         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <div style={{
             padding: '4px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: 700,
-            background: i === step ? `linear-gradient(135deg, ${BRAND.violet}, ${BRAND.purple})` : i < step ? '#d1fae5' : '#eee',
+            background: i === step ? `linear-gradient(135deg, ${BRAND.violet}, ${BRAND.purple})` : i < step ? '#d1fae5' : 'var(--canvas-bg)',
             color: i === step ? 'white' : i < step ? '#065f46' : '#888'
           }}>
             {i < step ? '✓ ' : ''}{label}
@@ -295,7 +296,7 @@ function Wizard({ onComplete, onCancel }) {
                 <div key={key} style={S.pickCard(vertical === key)} onClick={() => pickVertical(key)}>
                   <div style={{ fontSize: '1.8rem' }}>{v.icon}</div>
                   <div style={{ fontWeight: 700 }}>{key}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#777' }}>{v.services.length} VLANs pre-seeded</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{v.services.length} VLANs pre-seeded</div>
                 </div>
               ))}
             </div>
@@ -311,16 +312,16 @@ function Wizard({ onComplete, onCancel }) {
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               {ARCHITECTURES.map(a => (
                 <div key={a.key} style={S.pickCard(architecture === a.key)} onClick={() => setArchitecture(a.key)}>
-                  <div style={{ fontSize: '1.6rem' }}>{a.icon}</div>
+                  <img src={a.icon} alt={a.title} style={{ width: '42px', height: '42px', pointerEvents: 'none' }} />
                   <div style={{ fontWeight: 700 }}>{a.title}</div>
-                  <div style={{ fontSize: '0.75rem', color: '#777' }}>{a.desc}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{a.desc}</div>
                 </div>
               ))}
             </div>
           </div>
 
-          <div style={{ ...S.card, background: '#faf8fd' }}>
-            <span style={{ fontSize: '0.82rem', color: '#666' }}>
+          <div style={{ ...S.card }}>
+            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
               ℹ️ The wizard builds <strong>site-wide VLAN</strong> designs (each site shares one VLAN set — the common case).
               Routed-closet designs (per-closet subnets, York-style) come in via the Excel upload path.
             </span>
@@ -394,7 +395,7 @@ function Wizard({ onComplete, onCancel }) {
             <span style={S.label}>Subnet plan — tokens: {'{site}'}, {'{site+100}'}, {'{vlan}'}</span>
             <input style={S.input} value={subnetTemplate} onChange={e => setSubnetTemplate(e.target.value)} />
             {sites[0] && services[0] && (
-              <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '8px' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
                 Preview for {sites[0].code || 'first site'} (site {sites[0].site}):&nbsp;
                 {services.slice(0, 3).map(s => subnetFor(subnetTemplate, parseInt(sites[0].site), parseInt(s.vlanId) || 0)).join(' · ')}
                 &nbsp;— gateways are .1, I-SIDs build as 2 + site + VLAN (e.g. {isidFor(parseInt(sites[0].site) || 10, parseInt(services[0].vlanId) || 8)})
@@ -424,10 +425,10 @@ function Wizard({ onComplete, onCancel }) {
                 <div key={idx} style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
                   <input style={{ ...S.input, width: '180px' }} placeholder="Closet (MDF1, IDF1...)" value={c.name}
                     onChange={e => { const out = { ...closetsBySite }; out[s.code] = out[s.code].map((x, i) => i === idx ? { ...x, name: e.target.value.toUpperCase() } : x); setClosetsBySite(out); }} />
-                  <span style={{ fontSize: '0.8rem', color: '#666' }}>switches:</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>switches:</span>
                   <input style={S.smallInput} type="number" min="1" value={c.count}
                     onChange={e => { const out = { ...closetsBySite }; out[s.code] = out[s.code].map((x, i) => i === idx ? { ...x, count: parseInt(e.target.value) || '' } : x); setClosetsBySite(out); }} />
-                  <span style={{ fontSize: '0.75rem', color: '#999' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                     → {c.name && c.count ? Array.from({ length: Math.min(c.count, 3) }, (_, i) => `${s.code}-${c.name}-${i + 1}`).join(', ') + (c.count > 3 ? '…' : '') : ''}
                   </span>
                   <button style={S.del} onClick={() => { const out = { ...closetsBySite }; out[s.code] = out[s.code].filter((_, i) => i !== idx); setClosetsBySite(out); }}>✕</button>
@@ -447,9 +448,9 @@ function Wizard({ onComplete, onCancel }) {
           <div style={S.card}>
             <label style={{ display: 'flex', gap: '10px', alignItems: 'center', cursor: 'pointer' }}>
               <input type="checkbox" checked={segVrf.enabled} onChange={e => setSegVrf({ ...segVrf, enabled: e.target.checked })} style={{ width: '18px', height: '18px' }} />
-              <span style={{ fontWeight: 700, color: BRAND.purple }}>Set up Segmented VRF (Fabric Engine 9.4+)</span>
+              <span style={{ fontWeight: 700, color: 'var(--extreme-violet)' }}>Set up Segmented VRF (Fabric Engine 9.4+)</span>
             </label>
-            <div style={{ fontSize: '0.82rem', color: '#666', marginTop: '6px' }}>
+            <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
               The fabric stays the default gateway for every subnet, but east-west routing is denied unless the firewall allows it.
               Requires Premier license; not supported on 4220 / 5320-16P/24P / 7830 (9.4).
             </div>
@@ -472,7 +473,7 @@ function Wizard({ onComplete, onCancel }) {
                 {services.map(svc => {
                   const cls = segVrf.classes[svc.vlanId] || 'trusted';
                   return (
-                    <div key={svc.vlanId} style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid #f3edfb' }}>
+                    <div key={svc.vlanId} style={{ display: 'flex', gap: '10px', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border-light)' }}>
                       <span style={{ width: '160px', fontWeight: 600 }}>VLAN {svc.vlanId} — {svc.name}</span>
                       {['trusted', 'untrusted'].map(opt => (
                         <label key={opt} style={{
@@ -504,7 +505,7 @@ function Wizard({ onComplete, onCancel }) {
       {/* ============ STEP 5: CREATE ============ */}
       {step === 5 && (
         <div style={S.card}>
-          <h3 style={{ color: BRAND.purple, marginTop: 0 }}>Ready to create: {districtName}</h3>
+          <h3 style={{ color: 'var(--extreme-violet)', marginTop: 0 }}>Ready to create: {districtName}</h3>
           <ul style={{ lineHeight: 1.9 }}>
             <li><strong>{vertical}</strong> · {ARCHITECTURES.find(a => a.key === architecture).title}</li>
             <li><strong>{sites.length}</strong> {noun.toLowerCase()}{sites.length === 1 ? '' : 's'}: {sites.map(s => s.code).join(', ')}</li>
@@ -512,7 +513,7 @@ function Wizard({ onComplete, onCancel }) {
             <li><strong>{sites.reduce((n, s) => n + (closetsBySite[s.code] || []).reduce((m, c) => m + (parseInt(c.count) || 0), 0), 0)}</strong> switches across {sites.reduce((n, s) => n + (closetsBySite[s.code] || []).length, 0)} closets</li>
             <li>Segmented VRF: <strong>{segVrf.enabled ? `ON — FW via VLAN ${segVrf.fwVlanId} at ${segVrf.fwIp}` : 'off'}</strong></li>
           </ul>
-          <div style={{ fontSize: '0.82rem', color: '#666' }}>
+          <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
             You land in the normal workflow next — Configure serials, fine-tune anything in Review, then export configs.
             💾 Save Project in the header keeps it all in a local file.
           </div>
@@ -575,9 +576,10 @@ function SegVrfPreview({ services, classes, fwVlan }) {
       {trusted.map((s, i) => chip(s, i, 'trusted'))}
       {untrusted.map((s, i) => chip(s, i, 'untrusted'))}
 
-      {/* Core */}
+      {/* Core (official Extreme switch icon) */}
       <rect x={510} y={coreY - 40} width={140} height={80} rx="12" fill="#00CC99" stroke="#fff" strokeWidth="1.5" />
-      <text x={580} y={coreY - 10} textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">L3 CORE</text>
+      <image href="/icons/switch.svg" x={522} y={coreY - 32} width="28" height="28" />
+      <text x={592} y={coreY - 12} textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">L3 CORE</text>
       <text x={580} y={coreY + 8} textAnchor="middle" fontSize="9.5" fill="#eafff7">Segmented VRF</text>
       <text x={580} y={coreY + 24} textAnchor="middle" fontSize="9.5" fill="#eafff7">default GW for all</text>
 
@@ -588,10 +590,11 @@ function SegVrfPreview({ services, classes, fwVlan }) {
       <text x={695} y={coreY - 12} textAnchor="middle" fontSize="9" fontWeight="700" fill="#c4b5fd">UNRESTRICTED</text>
       <text x={695} y={coreY + 20} textAnchor="middle" fontSize="8.5" fill="#c4b5fd">VLAN {fwVlan}</text>
 
-      {/* Firewall */}
+      {/* Firewall (official Extreme firewall icon) */}
       <rect x={740} y={coreY - 35} width={100} height={70} rx="12" fill="#FF3333" stroke="#fff" strokeWidth="1.5" />
-      <text x={790} y={coreY - 5} textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">🔥 FW</text>
-      <text x={790} y={coreY + 14} textAnchor="middle" fontSize="8.5" fill="#ffe4e6">decides east-west</text>
+      <image href="/icons/firewall.svg" x={752} y={coreY - 26} width="26" height="26" />
+      <text x={806} y={coreY - 7} textAnchor="middle" fontSize="13" fontWeight="700" fill="#fff">FW</text>
+      <text x={790} y={coreY + 16} textAnchor="middle" fontSize="8.5" fill="#ffe4e6">decides east-west</text>
 
       {/* Blocked lateral note */}
       <text x={230} y={H - 18} fontSize="10" fill="#fca5a5" fontWeight="700">✕ Untrusted ↔ Untrusted and Untrusted ↔ Trusted are BLOCKED in the fabric — only the FW can allow them</text>

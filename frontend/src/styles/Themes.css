@@ -255,3 +255,44 @@
 [data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
   background: #64748b;
 }
+
+/* ============ THEME ENFORCEMENT ============ */
+/* Multiple legacy body rules compete across stylesheets; this attribute
+   selector outranks them all so the active theme always wins. */
+[data-theme="light"] body {
+  background: #F5F4F8 !important;
+  color: #1f2937 !important;
+}
+[data-theme="dark"] body {
+  background: #0f172a !important;
+  color: #f1f5f9 !important;
+}
+[data-theme] .card {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+[data-theme] .app-content,
+[data-theme] .step-content {
+  background: var(--canvas-bg);
+  color: var(--text-primary);
+}
+[data-theme] .app-sidebar {
+  background: var(--sidebar-bg);
+  border-color: var(--sidebar-border);
+}
+[data-theme] .step-header h2,
+[data-theme] .page-description,
+[data-theme] h2, [data-theme] h3, [data-theme] h4 {
+  color: var(--text-primary);
+}
+[data-theme] .app-container,
+[data-theme] .app-sidebar,
+[data-theme] .steps-title,
+[data-theme] .step-name {
+  color: var(--text-primary);
+}
+[data-theme] .step-desc,
+[data-theme] .progress-text {
+  color: var(--text-secondary);
+}

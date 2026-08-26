@@ -131,7 +131,7 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
   const siteGroups = groupBySite(switches);
 
   const inputStyle = {
-    width: '100%', padding: '6px 8px', border: '1px solid #d1b8f0',
+    width: '100%', padding: '6px 8px', border: '1px solid var(--border-color)', background: 'var(--card-bg)', color: 'var(--text-primary)',
     borderRadius: '6px', fontSize: '0.85rem'
   };
 
@@ -147,13 +147,13 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
         cursor: 'pointer',
         padding: '0.75rem',
         margin: '0.25rem 0',
-        background: selectedName === sw.name ? 'rgba(111, 45, 168, 0.15)' : '#f5f5f5',
+        background: selectedName === sw.name ? 'rgba(117, 25, 249, 0.18)' : 'var(--canvas-bg)',
         borderRadius: '0.5rem',
-        border: '1px solid #e5e7eb'
+        border: '1px solid var(--border-color)'
       }}
     >
       <strong>{sw.name}</strong>
-      <span style={{ marginLeft: '1rem', fontSize: '0.85rem', color: '#6b7280' }}>
+      <span style={{ marginLeft: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
         {sw.type} • {sw.vlans?.length || 0} VLANs{sw.closet ? ` • Closet: ${sw.closet}` : ''}
       </span>
     </div>
@@ -199,7 +199,7 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
                     <>
                       {mdfList.length > 0 && (
                         <div style={{ marginBottom: '1rem' }}>
-                          <strong style={{ color: '#5B059C' }}>
+                          <strong style={{ color: 'var(--extreme-violet)' }}>
                             🏛️ Distribution — {topo.mdfKey} ({mdfList.length} switch{mdfList.length === 1 ? '' : 'es'}):
                           </strong>
                           <div style={{ marginLeft: '1rem', marginTop: '0.5rem' }}>
@@ -210,14 +210,14 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
 
                       {topo.accessClosets.length > 0 && (
                         <div style={{ marginBottom: '1rem' }}>
-                          <strong style={{ color: '#7519F9' }}>
+                          <strong style={{ color: 'var(--extreme-violet)' }}>
                             🚪 Access Closets ({topo.accessClosets.length}):
                           </strong>
                           {topo.accessClosets.map(closetKey => {
                             const list = topo.closets.get(closetKey);
                             return (
                               <div key={closetKey} style={{ marginLeft: '1rem', marginTop: '0.75rem' }}>
-                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#666' }}>
+                                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
                                   {closetKey} ({list.length} switch{list.length === 1 ? '' : 'es'})
                                 </span>
                                 <div style={{ marginTop: '0.25rem' }}>

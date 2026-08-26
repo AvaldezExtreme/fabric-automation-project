@@ -351,8 +351,8 @@ function Visualization({ data, onNext, onBack }) {
               ...styles.siteTab,
               background: currentSite.id === site.id
                 ? `linear-gradient(135deg, ${BRAND.violet}, ${BRAND.purple})`
-                : '#EFEFEF',
-              color: currentSite.id === site.id ? 'white' : '#444',
+                : 'var(--canvas-bg)',
+              color: currentSite.id === site.id ? 'white' : 'var(--text-primary)',
               boxShadow: currentSite.id === site.id ? '0 4px 12px rgba(117,25,249,0.4)' : 'none'
             }}
           >
@@ -460,7 +460,7 @@ function Visualization({ data, onNext, onBack }) {
                       </div>
                     ))
                   ) : (
-                    <div style={{ color: '#999' }}>No VLANs configured</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>No VLANs configured</div>
                   )}
                 </div>
               </div>
@@ -494,18 +494,18 @@ function Visualization({ data, onNext, onBack }) {
 
 function PDFContent({ sites }) {
   return (
-    <div style={{ padding: '24px', fontFamily: "'DM Sans', Arial, sans-serif", width: '1350px', background: '#fff' }}>
-      <div className="pdf-site" style={{ textAlign: 'center', padding: '16px', background: '#fff' }}>
-        <h1 style={{ color: BRAND.purple, marginBottom: '4px' }}>FACE — Network Topology Report</h1>
+    <div style={{ padding: '24px', fontFamily: "'DM Sans', Arial, sans-serif", width: '1350px', background: 'var(--card-bg)' }}>
+      <div className="pdf-site" style={{ textAlign: 'center', padding: '16px', background: 'var(--card-bg)' }}>
+        <h1 style={{ color: 'var(--extreme-violet)', marginBottom: '4px' }}>FACE — Network Topology Report</h1>
         <p style={{ margin: 0 }}>Fabric Auto Configuration Engine</p>
-        <p style={{ color: '#999', margin: '4px 0 0' }}>Generated: {new Date().toLocaleString()}</p>
+        <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0' }}>Generated: {new Date().toLocaleString()}</p>
         <p style={{ color: '#666', margin: '10px 0 0', fontSize: '13px' }}>
           {sites.length} site{sites.length === 1 ? '' : 's'} · {sites.reduce((n, s) => n + s.switches.length, 0)} switches
         </p>
       </div>
 
       {sites.map(site => (
-        <div key={site.id} className="pdf-site" style={{ marginBottom: '24px', background: '#fff', padding: '8px 0' }}>
+        <div key={site.id} className="pdf-site" style={{ marginBottom: '24px', background: 'var(--card-bg)', padding: '8px 0' }}>
           <h2 style={{ borderBottom: `3px solid ${BRAND.purple}`, paddingBottom: '8px' }}>
             📍 {site.name} (Site {site.id})
           </h2>
@@ -545,7 +545,7 @@ function PDFContent({ sites }) {
             </div>
           ))}
 
-          <div style={{ paddingTop: '8px', fontSize: '10px', color: '#999' }}>
+          <div style={{ paddingTop: '8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
             © 2026 Extreme Networks, Inc. | FACE — Fabric Auto Configuration Engine
           </div>
         </div>
@@ -563,7 +563,7 @@ const styles = {
   },
   noData: {
     padding: '2rem',
-    color: '#6b7280'
+    color: 'var(--text-secondary)'
   },
   siteSelector: {
     display: 'flex',
@@ -605,7 +605,7 @@ const styles = {
   exportLabel: {
     fontSize: '13px',
     fontWeight: '600',
-    color: BRAND.purple
+    color: 'var(--extreme-violet)'
   },
   exportBtn: {
     padding: '9px 16px',
@@ -618,8 +618,8 @@ const styles = {
     fontWeight: '600'
   },
   rightPanel: {
-    backgroundColor: '#faf8fd',
-    border: '1px solid #e9defa',
+    backgroundColor: 'var(--card-bg)',
+    border: '1px solid var(--border-color)',
     borderRadius: '10px',
     padding: '18px',
     overflow: 'auto',
@@ -628,30 +628,30 @@ const styles = {
   sectionTitle: {
     fontSize: '15px',
     fontWeight: 'bold',
-    color: BRAND.purple,
+    color: 'var(--extreme-violet)',
     marginTop: 0,
     marginBottom: '12px'
   },
   detailsCard: {
-    backgroundColor: 'white',
+    backgroundColor: 'var(--card-bg)',
     borderRadius: '8px',
     padding: '16px',
-    border: '1px solid #e9defa'
+    border: '1px solid var(--border-color)'
   },
   detailRow: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '8px 0',
-    borderBottom: '1px solid #f3edfb'
+    borderBottom: '1px solid var(--border-light)'
   },
   label: {
     fontWeight: 'bold',
-    color: BRAND.purple,
+    color: 'var(--extreme-violet)',
     fontSize: '12px'
   },
   value: {
-    color: '#333',
+    color: 'var(--text-primary)',
     fontSize: '13px'
   },
   typeBadge: {
@@ -664,7 +664,7 @@ const styles = {
   subTitle: {
     fontSize: '13px',
     fontWeight: 'bold',
-    color: '#333',
+    color: 'var(--text-primary)',
     margin: '16px 0 10px'
   },
   vlanList: {
@@ -673,8 +673,8 @@ const styles = {
     gap: '8px'
   },
   vlanItem: {
-    background: 'linear-gradient(135deg, #faf8fd, #f3edfb)',
-    border: '1px solid #e9defa',
+    background: 'var(--canvas-bg)',
+    border: '1px solid var(--border-color)',
     borderRadius: '8px',
     padding: '10px 12px'
   },
@@ -686,26 +686,26 @@ const styles = {
   },
   vlanId: {
     fontWeight: 'bold',
-    color: BRAND.purple,
+    color: 'var(--extreme-violet)',
     fontSize: '12px'
   },
   vlanNameTag: {
     fontSize: '11px',
     fontWeight: '600',
-    color: '#333',
-    background: '#fff',
-    border: '1px solid #e9defa',
+    color: 'var(--text-primary)',
+    background: 'var(--card-bg)',
+    border: '1px solid var(--border-color)',
     borderRadius: '999px',
     padding: '2px 8px'
   },
   vlanMeta: {
     fontSize: '11px',
-    color: '#777'
+    color: 'var(--text-secondary)'
   },
   closeBtn: {
     border: 'none',
     background: '#f3edfb',
-    color: BRAND.purple,
+    color: 'var(--extreme-violet)',
     width: '28px',
     height: '28px',
     borderRadius: '50%',
@@ -726,8 +726,8 @@ const styles = {
     marginTop: '24px'
   },
   backBtn: {
-    backgroundColor: '#E8E8E8',
-    color: '#333',
+    backgroundColor: 'var(--canvas-bg)',
+    color: 'var(--text-primary)',
     border: 'none',
     padding: '12px 24px',
     borderRadius: '6px',
