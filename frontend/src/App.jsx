@@ -153,6 +153,68 @@ function App() {
     setShowThemeMenu(false);
   };
 
+  // ===== PROJECT SAVE / OPEN (Tier 3.2) =====
+  // Projects live as local files on the user's PC - FACE stores nothing
+  // server-side, so customer network data never leaves their machine.
+  const handleSaveProject = () => {
+    const project = {
+      faceProject: true,
+      projectVersion: 1,
+      appVersion: 'v2.5 (V2608264)',
+      savedAt: new Date().toISOString(),
+      currentStep,
+      data
+    };
+    const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const safeName = (data.districtName || 'Project').replace(/[^A-Za-z0-9-_]+/g, '') || 'Project';
+    a.href = url;
+    a.download = `FACE-${safeName}-${new Date().toISOString().split('T')[0]}.face.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleOpenProject = (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = ''; // allow re-opening the same file later
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const project = JSON.parse(ev.target.result);
+        if (!project.faceProject || !project.data || !Array.isArray(project.data.switches)) {
+          throw new Error('not a FACE project file');
+        }
+        if (data.switches.length > 0 &&
+            !window.confirm('Opening a project will replace your current work. Continue?')) {
+          return;
+        }
+        setData(project.data);
+        setCurrentStep(Math.min(Math.max(project.currentStep || 0, 0), steps.length - 1));
+        setError(null);
+      } catch (err) {
+        setError(`Could not open project: ${err.message}`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Warn before losing unsaved work on refresh/close
+  useEffect(() => {
+    const warn = (e) => {
+      if (data.switches.length > 0) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [data.switches.length]);
+
   const handleStepNext = (newData) => {
     setData(newData);
     setError(null);
@@ -210,6 +272,32 @@ function App() {
               <div className="user-name">{user.username}</div>
               <div className="user-role">Administrator</div>
             </div>
+
+            {/* Project Save / Open - local files only, nothing stored server-side */}
+            <button
+              onClick={handleSaveProject}
+              className="theme-toggle-btn"
+              title={data.switches.length === 0
+                ? 'Save Project (start a project first)'
+                : 'Save Project to your PC - your data never leaves your machine'}
+              disabled={data.switches.length === 0}
+              style={data.switches.length === 0 ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}
+            >
+              💾
+            </button>
+            <label
+              className="theme-toggle-btn"
+              title="Open a saved FACE project from your PC"
+              style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              📂
+              <input
+                type="file"
+                accept=".json,application/json"
+                onChange={handleOpenProject}
+                style={{ display: 'none' }}
+              />
+            </label>
 
             {/* Theme Selector */}
             <div className="theme-selector-wrapper">
@@ -361,7 +449,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.4 (V2608263)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.5 (V2608264)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>
