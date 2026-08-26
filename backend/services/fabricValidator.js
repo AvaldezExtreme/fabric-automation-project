@@ -1,7 +1,10 @@
 // ============================================
 // Fabric Validation Engine
-// Version: V2608173
-// Purpose: Comprehensive validation for Fabric configurations
+// Version: V2608262
+// Purpose: Comprehensive validation for Fabric configurations.
+// All uniqueness checks run against LOGICAL VLANs (site + VLAN + closet),
+// not per-switch copies - a VSN spanning many switches is the point of
+// fabric, not a conflict.
 // ============================================
 
 export const validateFabricConfiguration = (switches, settings = {}) => {
@@ -31,11 +34,14 @@ export const validateFabricConfiguration = (switches, settings = {}) => {
     return results;
   }
 
-  // Run all validation checks
-  runIPSubnetChecks(switches, results);
-  runVLANChecks(switches, results);
-  runISIDChecks(switches, results);
-  runFabricSpecificChecks(switches, results);
+  // One entry per distinct service: (site, VLAN, closet). Every check below
+  // works on these, so shared VLANs/I-SIDs across switches never false-flag.
+  const logicalVlans = buildLogicalVlans(switches);
+
+  runIPSubnetChecks(switches, logicalVlans, results);
+  runVLANChecks(logicalVlans, results);
+  runISIDChecks(logicalVlans, results);
+  runFabricSpecificChecks(switches, logicalVlans, results);
   runDHCPChecks(switches, settings, results);
   runInterfaceChecks(switches, results);
 
@@ -52,10 +58,44 @@ export const validateFabricConfiguration = (switches, settings = {}) => {
 };
 
 // ============================================
+// LOGICAL VLAN DERIVATION
+// ============================================
+
+const buildLogicalVlans = (switches) => {
+  const map = new Map();
+
+  switches.forEach((sw) => {
+    if (!sw.vlans || !Array.isArray(sw.vlans)) return;
+    sw.vlans.forEach((vlan) => {
+      const closet = (vlan.closet || '').toString().trim().toUpperCase();
+      const key = `${sw.siteId}|${vlan.vlanId}|${closet}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          siteId: sw.siteId,
+          vlanId: vlan.vlanId,
+          closet: vlan.closet || '',
+          vlanName: vlan.vlanName || vlan.name || '',
+          subnet: (vlan.subnet || '').toString().trim(),
+          isid: vlan.isid || vlan.i_sid || null,
+          isidName: vlan.isidName || '',
+          switches: []
+        });
+      }
+      map.get(key).switches.push(sw.name);
+    });
+  });
+
+  return Array.from(map.values());
+};
+
+const vlanLabel = (v) =>
+  `Site ${v.siteId} VLAN ${v.vlanId}${v.closet ? ` (${v.closet})` : ''}`;
+
+// ============================================
 // L3 IP SUBNET VALIDATION
 // ============================================
 
-const runIPSubnetChecks = (switches, results) => {
+const runIPSubnetChecks = (switches, logicalVlans, results) => {
   const l3Switches = switches.filter(s => s.type === 'L3');
 
   if (l3Switches.length === 0) {
@@ -66,36 +106,33 @@ const runIPSubnetChecks = (switches, results) => {
       message: 'No L3 switches found. If using external gateway (firewall), this is expected.',
       severity: 'info'
     });
-    return;
+  } else {
+    results.checks.push({
+      type: 'pass',
+      category: 'L3 Configuration',
+      check: 'L3 Switches Present',
+      message: `Found ${l3Switches.length} L3 switches`,
+      severity: 'info'
+    });
   }
 
-  results.checks.push({
-    type: 'pass',
-    category: 'L3 Configuration',
-    check: 'L3 Switches Present',
-    message: `Found ${l3Switches.length} L3 switches`,
-    severity: 'info'
+  const withSubnet = logicalVlans.filter(v => v.subnet);
+
+  // Subnet conflicts: the same NETWORK used by two different services.
+  // (The same subnet appearing on many switches of one service is normal.)
+  const byNetwork = new Map();
+  withSubnet.forEach(v => {
+    const key = networkKey(v.subnet);
+    if (!byNetwork.has(key)) byNetwork.set(key, []);
+    byNetwork.get(key).push(v);
   });
 
-  // Check for IP subnet conflicts
-  const subnets = new Map();
   const subnetConflicts = [];
-
-  l3Switches.forEach((sw) => {
-    if (sw.vlans && Array.isArray(sw.vlans)) {
-      sw.vlans.forEach((vlan) => {
-        if (vlan.subnet) {
-          const subnetKey = normalizeSubnet(vlan.subnet);
-          if (subnets.has(subnetKey)) {
-            subnetConflicts.push({
-              subnet: vlan.subnet,
-              switches: [subnets.get(subnetKey), sw.name],
-              vlan: vlan.vlanId
-            });
-          } else {
-            subnets.set(subnetKey, sw.name);
-          }
-        }
+  byNetwork.forEach((vlans) => {
+    if (vlans.length > 1) {
+      subnetConflicts.push({
+        subnet: vlans[0].subnet,
+        usedBy: vlans.map(v => vlanLabel(v))
       });
     }
   });
@@ -105,7 +142,7 @@ const runIPSubnetChecks = (switches, results) => {
       type: 'error',
       category: 'L3 Configuration',
       check: 'Subnet Conflicts',
-      message: `Found ${subnetConflicts.length} overlapping subnets: ${subnetConflicts.map(c => c.subnet).join(', ')}`,
+      message: `Found ${subnetConflicts.length} subnet(s) used by more than one service: ${subnetConflicts.map(c => `${c.subnet} (${c.usedBy.join(' vs ')})`).join('; ').substring(0, 300)}`,
       details: subnetConflicts,
       severity: 'critical'
     });
@@ -114,16 +151,19 @@ const runIPSubnetChecks = (switches, results) => {
       type: 'pass',
       category: 'L3 Configuration',
       check: 'Subnet Conflicts',
-      message: `All ${subnets.size} subnets are unique (no conflicts detected)`,
+      message: `All ${byNetwork.size} subnets are unique per service (no conflicts detected)`,
       severity: 'info'
     });
   }
 
-  // Validate CIDR notation
+  // CIDR notation: validate the actual subnet strings
   const invalidCIDR = [];
-  subnets.forEach((switchName, subnet) => {
-    if (!isValidCIDR(subnet)) {
-      invalidCIDR.push({ subnet, switchName });
+  const seenSubnets = new Set();
+  withSubnet.forEach(v => {
+    if (seenSubnets.has(v.subnet)) return;
+    seenSubnets.add(v.subnet);
+    if (!isValidCIDR(v.subnet)) {
+      invalidCIDR.push({ subnet: v.subnet, usedBy: vlanLabel(v) });
     }
   });
 
@@ -132,7 +172,7 @@ const runIPSubnetChecks = (switches, results) => {
       type: 'error',
       category: 'L3 Configuration',
       check: 'CIDR Notation',
-      message: `Found ${invalidCIDR.length} invalid CIDR notations: ${invalidCIDR.map(c => c.subnet).join(', ')}`,
+      message: `Found ${invalidCIDR.length} invalid CIDR notation(s): ${invalidCIDR.map(c => `${c.subnet} (${c.usedBy})`).join(', ').substring(0, 300)}`,
       details: invalidCIDR,
       severity: 'critical'
     });
@@ -141,7 +181,7 @@ const runIPSubnetChecks = (switches, results) => {
       type: 'pass',
       category: 'L3 Configuration',
       check: 'CIDR Notation',
-      message: 'All IP subnets use valid CIDR notation',
+      message: `All ${seenSubnets.size} subnets use valid CIDR notation`,
       severity: 'info'
     });
   }
@@ -151,29 +191,11 @@ const runIPSubnetChecks = (switches, results) => {
 // L2 VLAN VALIDATION
 // ============================================
 
-const runVLANChecks = (switches, results) => {
-  const invalidVLANs = [];
-  const vlansBySite = new Map();
-
-  switches.forEach((sw) => {
-    if (sw.vlans && Array.isArray(sw.vlans)) {
-      sw.vlans.forEach((vlan) => {
-        const vlanId = parseInt(vlan.vlanId);
-
-        // Check valid range
-        if (isNaN(vlanId) || vlanId < 1 || vlanId > 4094) {
-          invalidVLANs.push({ vlanId: vlan.vlanId, switchName: sw.name });
-        }
-
-        // Track VLANs by site (duplicates across sites are OK)
-        const siteId = sw.siteId || 'unknown';
-        const key = `${siteId}-${vlanId}`;
-        if (!vlansBySite.has(key)) {
-          vlansBySite.set(key, []);
-        }
-        vlansBySite.get(key).push(sw.name);
-      });
-    }
+const runVLANChecks = (logicalVlans, results) => {
+  // VLAN ID range
+  const invalidVLANs = logicalVlans.filter(v => {
+    const id = parseInt(v.vlanId);
+    return isNaN(id) || id < 1 || id > 4094;
   });
 
   if (invalidVLANs.length > 0) {
@@ -182,7 +204,7 @@ const runVLANChecks = (switches, results) => {
       category: 'L2 Configuration',
       check: 'VLAN ID Range',
       message: `Found ${invalidVLANs.length} invalid VLAN ID(s). All VLAN IDs must be between 1-4094.`,
-      details: invalidVLANs,
+      details: invalidVLANs.map(v => ({ vlanId: v.vlanId, where: vlanLabel(v) })),
       severity: 'critical'
     });
   } else {
@@ -190,31 +212,25 @@ const runVLANChecks = (switches, results) => {
       type: 'pass',
       category: 'L2 Configuration',
       check: 'VLAN ID Range',
-      message: `All VLAN IDs are valid (range 1-4094). Duplicates across different sites are allowed.`,
+      message: `All ${logicalVlans.length} VLANs are valid (range 1-4094). Reuse across sites/closets is allowed.`,
       severity: 'info'
     });
   }
 
-  // Check VLAN name uniqueness
-  const vlanNames = new Map();
-  const nameConflicts = [];
+  // VLAN name consistency: the same VLAN ID within a site should keep one name
+  const namesBySiteVlan = new Map();
+  logicalVlans.forEach(v => {
+    if (!v.vlanName) return;
+    const key = `${v.siteId}|${v.vlanId}`;
+    if (!namesBySiteVlan.has(key)) namesBySiteVlan.set(key, new Map());
+    namesBySiteVlan.get(key).set(v.vlanName, vlanLabel(v));
+  });
 
-  switches.forEach((sw) => {
-    if (sw.vlans && Array.isArray(sw.vlans)) {
-      sw.vlans.forEach((vlan) => {
-        if (vlan.name) {
-          const key = `${vlan.vlanId}-${vlan.name}`;
-          if (vlanNames.has(key)) {
-            nameConflicts.push({
-              vlanId: vlan.vlanId,
-              name: vlan.name,
-              switches: [vlanNames.get(key), sw.name]
-            });
-          } else {
-            vlanNames.set(key, sw.name);
-          }
-        }
-      });
+  const nameConflicts = [];
+  namesBySiteVlan.forEach((names, key) => {
+    if (names.size > 1) {
+      const [siteId, vlanId] = key.split('|');
+      nameConflicts.push({ siteId, vlanId, names: [...names.keys()] });
     }
   });
 
@@ -223,7 +239,7 @@ const runVLANChecks = (switches, results) => {
       type: 'warning',
       category: 'L2 Configuration',
       check: 'VLAN Name Consistency',
-      message: `Found ${nameConflicts.length} VLAN name mismatches across switches`,
+      message: `Found ${nameConflicts.length} VLAN(s) carrying different names within one site: ${nameConflicts.map(c => `Site ${c.siteId} VLAN ${c.vlanId}: ${c.names.join(' vs ')}`).join('; ').substring(0, 300)}`,
       details: nameConflicts,
       severity: 'warning'
     });
@@ -232,7 +248,7 @@ const runVLANChecks = (switches, results) => {
       type: 'pass',
       category: 'L2 Configuration',
       check: 'VLAN Name Consistency',
-      message: 'VLAN names are consistent across switches',
+      message: 'VLAN names are consistent within each site',
       severity: 'info'
     });
   }
@@ -242,55 +258,13 @@ const runVLANChecks = (switches, results) => {
 // I-SID VALIDATION (Fabric-specific)
 // ============================================
 
-const runISIDChecks = (switches, results) => {
-  const isidMap = new Map();
-  const isidConflicts = [];
-  const invalidISIDs = [];
-  const isidNameMap = new Map();
-  const isidNameConflicts = [];
+const runISIDChecks = (logicalVlans, results) => {
+  const withIsid = logicalVlans.filter(v => v.isid);
 
-  switches.forEach((sw) => {
-    if (sw.vlans && Array.isArray(sw.vlans)) {
-      sw.vlans.forEach((vlan) => {
-        const isid = vlan.isid || vlan.i_sid;
-
-        if (isid) {
-          const isidNum = parseInt(isid);
-
-          // Check valid range (I-SID: 4096-16777215)
-          if (isNaN(isidNum) || isidNum < 4096 || isidNum > 16777215) {
-            invalidISIDs.push({
-              isid: isid,
-              vlanId: vlan.vlanId,
-              switchName: sw.name
-            });
-          }
-
-          // Check for duplicates
-          if (isidMap.has(isidNum)) {
-            isidConflicts.push({
-              isid: isidNum,
-              vlans: [isidMap.get(isidNum), vlan.vlanId],
-              switches: [sw.name, sw.name] // Would be different switches in real scenario
-            });
-          } else {
-            isidMap.set(isidNum, vlan.vlanId);
-          }
-
-          // Check name uniqueness
-          if (vlan.isidName) {
-            if (isidNameMap.has(vlan.isidName)) {
-              isidNameConflicts.push({
-                name: vlan.isidName,
-                isids: [isidNameMap.get(vlan.isidName), isid]
-              });
-            } else {
-              isidNameMap.set(vlan.isidName, isid);
-            }
-          }
-        }
-      });
-    }
+  // Range
+  const invalidISIDs = withIsid.filter(v => {
+    const n = parseInt(v.isid);
+    return isNaN(n) || n < 4096 || n > 16777215;
   });
 
   if (invalidISIDs.length > 0) {
@@ -298,46 +272,81 @@ const runISIDChecks = (switches, results) => {
       type: 'error',
       category: 'Fabric Configuration',
       check: 'I-SID Range',
-      message: `Found ${invalidISIDs.length} invalid I-SID values (must be 4096-16777215)`,
-      details: invalidISIDs,
+      message: `Found ${invalidISIDs.length} invalid I-SID value(s) (must be 4096-16777215): ${invalidISIDs.map(v => `${v.isid} at ${vlanLabel(v)}`).join(', ').substring(0, 300)}`,
+      details: invalidISIDs.map(v => ({ isid: v.isid, where: vlanLabel(v) })),
+      severity: 'critical'
+    });
+  } else {
+    const uniqueIsids = new Set(withIsid.map(v => parseInt(v.isid))).size;
+    results.checks.push({
+      type: 'pass',
+      category: 'Fabric Configuration',
+      check: 'I-SID Range',
+      message: `All ${uniqueIsids} I-SIDs are in valid range (4096-16777215)`,
+      severity: 'info'
+    });
+  }
+
+  // Uniqueness: one I-SID must mean one service. The same I-SID on many
+  // switches (or intentionally shared across sites with the same VLAN and
+  // subnet) is exactly how fabric VSNs work - only flag an I-SID that maps
+  // to DIFFERENT VLAN/subnet combinations.
+  const byIsid = new Map();
+  withIsid.forEach(v => {
+    const n = parseInt(v.isid);
+    if (!byIsid.has(n)) byIsid.set(n, new Map());
+    byIsid.get(n).set(`${v.vlanId}|${v.subnet}`, vlanLabel(v));
+  });
+
+  const isidCollisions = [];
+  byIsid.forEach((services, isid) => {
+    if (services.size > 1) {
+      isidCollisions.push({ isid, services: [...services.values()] });
+    }
+  });
+
+  if (isidCollisions.length > 0) {
+    results.checks.push({
+      type: 'error',
+      category: 'Fabric Configuration',
+      check: 'I-SID Uniqueness',
+      message: `Found ${isidCollisions.length} I-SID(s) mapped to different services: ${isidCollisions.map(c => `${c.isid} (${c.services.join(' vs ')})`).join('; ').substring(0, 300)}`,
+      details: isidCollisions,
       severity: 'critical'
     });
   } else {
     results.checks.push({
       type: 'pass',
       category: 'Fabric Configuration',
-      check: 'I-SID Range',
-      message: `All ${isidMap.size} I-SIDs are in valid range (4096-16777215)`,
+      check: 'I-SID Uniqueness',
+      message: `Every I-SID maps to exactly one service. (Shared VSNs spanning switches or sites are correctly recognized.)`,
       severity: 'info'
     });
   }
 
-  if (isidConflicts.length > 0) {
-    results.checks.push({
-      type: 'info',
-      category: 'Fabric Configuration',
-      check: 'I-SID Uniqueness',
-      message: `Note: I-SIDs are typically managed per-site, so duplicates across sites are normal.`,
-      details: isidConflicts,
-      severity: 'info'
-    });
-  } else {
-    results.checks.push({
-      type: 'pass',
-      category: 'Fabric Configuration',
-      check: 'I-SID Uniqueness',
-      message: `All I-SIDs are unique. (Per-site duplication is acceptable.)`,
-      severity: 'info'
-    });
-  }
+  // I-SID name uniqueness: the same name on two different I-SIDs is
+  // confusing labeling; the same name repeated for one I-SID is normal.
+  const byName = new Map();
+  withIsid.forEach(v => {
+    if (!v.isidName) return;
+    if (!byName.has(v.isidName)) byName.set(v.isidName, new Set());
+    byName.get(v.isidName).add(parseInt(v.isid));
+  });
 
-  if (isidNameConflicts.length > 0) {
+  const nameCollisions = [];
+  byName.forEach((isids, name) => {
+    if (isids.size > 1) {
+      nameCollisions.push({ name, isids: [...isids] });
+    }
+  });
+
+  if (nameCollisions.length > 0) {
     results.checks.push({
       type: 'warning',
       category: 'Fabric Configuration',
       check: 'I-SID Name Uniqueness',
-      message: `Found ${isidNameConflicts.length} duplicate I-SID names`,
-      details: isidNameConflicts,
+      message: `Found ${nameCollisions.length} I-SID name(s) used by more than one I-SID: ${nameCollisions.map(c => `"${c.name}" (${c.isids.join(', ')})`).join('; ').substring(0, 300)}`,
+      details: nameCollisions,
       severity: 'warning'
     });
   } else {
@@ -345,7 +354,7 @@ const runISIDChecks = (switches, results) => {
       type: 'pass',
       category: 'Fabric Configuration',
       check: 'I-SID Name Uniqueness',
-      message: 'All I-SID names are unique',
+      message: 'Every I-SID name maps to exactly one I-SID',
       severity: 'info'
     });
   }
@@ -355,8 +364,7 @@ const runISIDChecks = (switches, results) => {
 // FABRIC-SPECIFIC CHECKS
 // ============================================
 
-const runFabricSpecificChecks = (switches, results) => {
-  // Check for ISIS configuration on L3
+const runFabricSpecificChecks = (switches, logicalVlans, results) => {
   const l3Switches = switches.filter(s => s.type === 'L3');
 
   if (l3Switches.length > 0) {
@@ -369,13 +377,7 @@ const runFabricSpecificChecks = (switches, results) => {
     });
   }
 
-  // Check for VLAN to I-SID mapping
-  const mappedVLANs = switches.reduce((count, sw) => {
-    if (sw.vlans) {
-      return count + sw.vlans.filter(v => v.isid || v.i_sid).length;
-    }
-    return count;
-  }, 0);
+  const mappedVLANs = logicalVlans.filter(v => v.isid).length;
 
   if (mappedVLANs === 0) {
     results.checks.push({
@@ -390,7 +392,7 @@ const runFabricSpecificChecks = (switches, results) => {
       type: 'pass',
       category: 'Fabric Features',
       check: 'VLAN-I-SID Mapping',
-      message: `${mappedVLANs} VLAN-to-I-SID mappings configured`,
+      message: `${mappedVLANs} VLAN-to-I-SID service mappings configured`,
       severity: 'info'
     });
   }
@@ -463,22 +465,6 @@ const runInterfaceChecks = (switches, results) => {
         interfaceIPs.set(sw.mgmtIp, sw.name);
       }
     }
-
-    if (sw.vlans && Array.isArray(sw.vlans)) {
-      sw.vlans.forEach((vlan) => {
-        if (vlan.ip) {
-          if (interfaceIPs.has(vlan.ip)) {
-            ipConflicts.push({
-              ip: vlan.ip,
-              vlan: vlan.vlanId,
-              switches: [interfaceIPs.get(vlan.ip), sw.name]
-            });
-          } else {
-            interfaceIPs.set(vlan.ip, sw.name);
-          }
-        }
-      });
-    }
   });
 
   if (ipConflicts.length > 0) {
@@ -486,7 +472,7 @@ const runInterfaceChecks = (switches, results) => {
       type: 'error',
       category: 'Interface Configuration',
       check: 'IP Address Conflicts',
-      message: `Found ${ipConflicts.length} duplicate IP address(es)`,
+      message: `Found ${ipConflicts.length} duplicate management IP address(es)`,
       details: ipConflicts,
       severity: 'critical'
     });
@@ -495,7 +481,9 @@ const runInterfaceChecks = (switches, results) => {
       type: 'pass',
       category: 'Interface Configuration',
       check: 'IP Address Conflicts',
-      message: `All ${interfaceIPs.size} IP addresses are unique`,
+      message: interfaceIPs.size > 0
+        ? `All ${interfaceIPs.size} management IP addresses are unique`
+        : 'No management IP conflicts detected',
       severity: 'info'
     });
   }
@@ -536,9 +524,17 @@ const isValidIP = (ip) => {
   return true;
 };
 
-const normalizeSubnet = (subnet) => {
-  // Normalize subnet for comparison (could expand to full range)
-  return subnet.split('/')[0];
+// Canonical "network/prefix" key so 10.104.1.1/16 and 10.104.0.0/16
+// compare as the same network. Invalid strings fall back to the raw value.
+const networkKey = (subnet) => {
+  if (!isValidCIDR(subnet)) return `raw:${subnet}`;
+  const [ip, prefixStr] = subnet.split('/');
+  const prefix = parseInt(prefixStr);
+  const octets = ip.split('.').map(Number);
+  const ipInt = ((octets[0] << 24) >>> 0) + (octets[1] << 16) + (octets[2] << 8) + octets[3];
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+  const net = (ipInt & mask) >>> 0;
+  return `${net}/${prefix}`;
 };
 
 export default {
