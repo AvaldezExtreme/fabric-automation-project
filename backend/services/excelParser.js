@@ -165,8 +165,10 @@ export const extractNetworkData = (excelSheets) => {
     });
   }
   
-  // ===== FIRST PASS: Extract ALL VLANs directly from Column E (Edge Vlans) =====
+  // ===== FIRST PASS: Collect ALL VLAN entries from Column E (Edge Vlans) =====
+  // No dedupe yet - routed-access detection below decides how to dedupe.
 let lastKnownSiteId = null;
+const siteVlanEntries = new Map();
 
 allRows.forEach(({ row }) => {
   // Direct VLAN extraction from Column E
@@ -178,45 +180,41 @@ allRows.forEach(({ row }) => {
   const isidName = sanitizeInput(row['I-SID Name']?.toString() || '');  // Column J
   const deviceType = row['DeviceType'];  // Column H
   const normalizedType = normalizeDeviceType(deviceType);
-  
+  const rowCloset = sanitizeInput(row['Closet']?.toString() || '').trim();  // Column S
+
   // If siteId is missing, inherit from previous row
   if (!siteId && lastKnownSiteId) {
     siteId = lastKnownSiteId;
   }
-  
+
   // Track siteId for next row
   if (siteId) {
     lastKnownSiteId = siteId;
   }
-  
+
   // Simple check: if Column E (Edge Vlans) has data, it's a VLAN row
   if (edgeVlan && vlanName && siteId && layerISID) {
-    if (!siteVlans.has(siteId)) {
-      siteVlans.set(siteId, []);
+    if (!siteVlanEntries.has(siteId)) {
+      siteVlanEntries.set(siteId, []);
     }
-    
+
     const vlanId = parseInt(edgeVlan);
-    const existingVlan = siteVlans.get(siteId).find(v => v.vlanId === vlanId);
-    
-    if (!existingVlan) {
-      siteVlans.get(siteId).push({
-        vlanId: vlanId,
-        vlanName: vlanName,
-        subnet: subnet,
-        isid: parseInt(layerISID),
-        isidName: isidName,
-        deviceType: normalizedType
-      });
-      
-      console.log(`DEBUG VLAN: Site ${siteId}, VLAN ${vlanId} (${vlanName}) - I-SID ${layerISID}`);
-    }
-    
-    // Track device types
+    siteVlanEntries.get(siteId).push({
+      vlanId: vlanId,
+      vlanName: vlanName,
+      subnet: subnet,
+      isid: parseInt(layerISID),
+      isidName: isidName,
+      deviceType: normalizedType,
+      closet: rowCloset
+    });
+
+    // Track device types (site-wide auto-sense; first per type wins)
     if (normalizedType) {
       if (!siteDeviceTypes.has(siteId)) {
         siteDeviceTypes.set(siteId, {});
       }
-      
+
       const typeMap = siteDeviceTypes.get(siteId);
       if (!typeMap[normalizedType]) {
         typeMap[normalizedType] = {
@@ -229,9 +227,39 @@ allRows.forEach(({ row }) => {
   }
 });
 
+// ===== ROUTED-ACCESS DETECTION + DEDUPE =====
+// The common case (site-wide VLANs, e.g. Franklin) never repeats a VLAN ID
+// within a site, and dedupes by VLAN ID exactly as before. A site switches
+// to "routed access" (York-style closet-level routing) ONLY when the same
+// VLAN ID appears with 2+ different closets AND 2+ different subnets -
+// then VLANs are kept per (vlanId, closet) pair instead.
+const siteRouted = new Map();
+siteVlanEntries.forEach((entries, siteId) => {
+  const byVlan = new Map();
+  entries.forEach(e => {
+    if (!byVlan.has(e.vlanId)) byVlan.set(e.vlanId, { closets: new Set(), subnets: new Set() });
+    const rec = byVlan.get(e.vlanId);
+    if (e.closet) rec.closets.add(e.closet.toUpperCase());
+    if (e.subnet) rec.subnets.add(e.subnet);
+  });
+  const routed = [...byVlan.values()].some(rec => rec.closets.size >= 2 && rec.subnets.size >= 2);
+  siteRouted.set(siteId, routed);
+
+  const seen = new Set();
+  const kept = [];
+  entries.forEach(e => {
+    const key = routed ? `${e.vlanId}|${(e.closet || '').toUpperCase()}` : `${e.vlanId}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      kept.push(e);
+    }
+  });
+  siteVlans.set(siteId, kept);
+});
+
 console.log(`\nDEBUG: Total VLAN sites parsed: ${siteVlans.size}`);
 siteVlans.forEach((vlans, siteId) => {
-  console.log(`  Site ${siteId}: ${vlans.length} VLANs`);
+  console.log(`  Site ${siteId}: ${vlans.length} VLANs${siteRouted.get(siteId) ? ' [ROUTED ACCESS - closet-scoped]' : ''}`);
 });
   
   // ===== SECOND PASS: Extract SWITCHES (only rows with SwitchName) =====
@@ -289,19 +317,38 @@ siteOctetCounters.forEach((octet, siteId) => {
   
   // ===== THIRD PASS: Assign VLANs to switches =====
   const switchesArray = Array.from(switches.values());
-  
+
   switchesArray.forEach(sw => {
     const siteId = sw.siteId;
     const allSiteVlans = siteVlans.get(siteId) || [];
-    sw.vlans = [...allSiteVlans];
-    
-    sw.autoSenseCommands = generateAutoSenseCommands(siteDeviceTypes.get(siteId) || {});
-    
+
+    if (siteRouted.get(siteId) === true) {
+      // Routed access (York-style): closet-scoped VLANs go only to their
+      // closet's switches; closet-less VLANs (e.g. site-wide wireless L2
+      // VSNs) go to every switch in the site.
+      const swCloset = (sw.closet || '').toString().trim().toUpperCase();
+      sw.vlans = allSiteVlans.filter(v => !v.closet || v.closet.toUpperCase() === swCloset);
+      sw.routedAccess = true;
+
+      // Auto-sense derives from this switch's own VLANs (per-closet I-SIDs)
+      const typeMap = {};
+      sw.vlans.forEach(v => {
+        if (v.deviceType && !typeMap[v.deviceType]) {
+          typeMap[v.deviceType] = { isid: v.isid, vlanId: v.vlanId, vlanName: v.vlanName };
+        }
+      });
+      sw.autoSenseCommands = generateAutoSenseCommands(typeMap);
+    } else {
+      // Site-wide (the common case): every switch carries all site VLANs
+      sw.vlans = [...allSiteVlans];
+      sw.autoSenseCommands = generateAutoSenseCommands(siteDeviceTypes.get(siteId) || {});
+    }
+
     if (sw.type === 'L2') {
       sw.l2DefaultGateway = l2DefaultGateway;
     }
   });
-  
+
   return switchesArray;
 };
 

@@ -139,7 +139,7 @@ function Login({ onLoginSuccess }) {
           {/* Footer */}
           <div className="auth-footer">
             <p>Need help? Contact <a href="mailto:support@extremenetworks.com">support@extremenetworks.com</a></p>
-            <p className="version">FACE - Fabric Auto Configuration Engine v2.2.2 (V2608212)</p>
+            <p className="version">FACE - Fabric Auto Configuration Engine v2.3 (V2608261)</p>
           </div>
         </div>
       </div>
