@@ -17,6 +17,7 @@ function Upload({ onNext, onError }) {
   const [loadingSample, setLoadingSample] = useState(false);
   const [parseResult, setParseResult] = useState(null);
   const [wizardMode, setWizardMode] = useState(false);
+  const [entryPath, setEntryPath] = useState(null); // null | 'new' | 'migrate' | 'all'
 
   if (wizardMode) {
     return <Wizard onComplete={onNext} onCancel={() => setWizardMode(false)} />;
@@ -176,53 +177,127 @@ function Upload({ onNext, onError }) {
       <h2>Step 1: Upload Network Configuration File</h2>
       <p className="page-description">Upload your network configuration Excel file to begin</p>
 
-      {/* Template & Sample toolbar */}
-      <div style={{
-        display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center',
-        background: 'var(--card-bg)',
-        border: '1px solid var(--border-color)', borderRadius: '10px',
-        padding: '14px 16px', marginBottom: '1.5rem'
-      }}>
-        <div style={{ flex: '1 1 300px' }}>
-          <strong style={{ color: 'var(--extreme-violet)' }}>New customer?</strong>
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            Download the fillable template (with instructions and dropdowns), or explore the app with sample data.
+      {/* ===== ENTRY FUNNEL: who are you, and how do you want to start? ===== */}
+      {!entryPath && (
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
+            <div
+              onClick={() => setEntryPath('new')}
+              style={{
+                flex: '1 1 320px', padding: '22px', borderRadius: '12px', cursor: 'pointer',
+                background: 'var(--card-bg)', border: '1px solid var(--border-color)', textAlign: 'center'
+              }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '58px', height: '58px', borderRadius: '50%', background: '#f1f5f9', marginBottom: '10px' }}>
+                <img src="/icons/fabric.svg" alt="" style={{ width: '36px', height: '36px' }} />
+              </span>
+              <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>New fabric design</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
+                New to Extreme, or starting a fresh fabric project — answer a few discovery questions and FACE builds it. No spreadsheet needed.
+              </div>
+              <div style={{ marginTop: '12px', fontWeight: 700, color: 'var(--extreme-violet)' }}>Start here →</div>
+            </div>
+
+            <div
+              onClick={() => setEntryPath('migrate')}
+              style={{
+                flex: '1 1 320px', padding: '22px', borderRadius: '12px', cursor: 'pointer',
+                background: 'var(--card-bg)', border: '1px solid var(--border-color)', textAlign: 'center'
+              }}
+            >
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '58px', height: '58px', borderRadius: '50%', background: '#f1f5f9', marginBottom: '10px' }}>
+                <img src="/icons/switch.svg" alt="" style={{ width: '36px', height: '36px' }} />
+              </span>
+              <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-primary)' }}>Existing customer — migrating to Fabric</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
+                Moving from EXOS / Switch Engine into Fabric, or you already have a FACE template file — upload it, or grab a fresh template.
+              </div>
+              <div style={{ marginTop: '12px', fontWeight: 700, color: 'var(--extreme-violet)' }}>Start here →</div>
+            </div>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '10px' }}>
+            <button type="button" onClick={() => setEntryPath('all')} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.82rem', textDecoration: 'underline' }}>
+              or just show me all the options
+            </button>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={handleDownloadTemplate}
-          disabled={downloadingTemplate}
-          style={{
-            padding: '10px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
-            background: 'linear-gradient(135deg, #7519F9, #5B059C)', color: 'white', fontWeight: 600
-          }}
-        >
-          {downloadingTemplate ? '⏳ Generating…' : '📥 Download Template'}
-        </button>
-        <button
-          type="button"
-          onClick={handleLoadSample}
-          disabled={loadingSample}
-          style={{
-            padding: '10px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
-            background: 'linear-gradient(135deg, #00CC99, #00926b)', color: 'white', fontWeight: 600
-          }}
-        >
-          {loadingSample ? '⏳ Loading…' : '✨ Try Sample Data'}
-        </button>
-        <button
-          type="button"
-          onClick={() => setWizardMode(true)}
-          style={{
-            padding: '10px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
-            background: 'linear-gradient(135deg, #7D76F2, #5B059C)', color: 'white', fontWeight: 600
-          }}
-        >
-          🧙 Start From Scratch
-        </button>
-      </div>
+      )}
 
+      {entryPath && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1rem' }}>
+          <span style={{ padding: '4px 14px', borderRadius: '999px', background: 'rgba(117,25,249,0.12)', color: 'var(--extreme-violet)', fontWeight: 700, fontSize: '0.8rem' }}>
+            {entryPath === 'new' ? '🧭 New fabric design' : entryPath === 'migrate' ? '🔁 Migrating to Fabric' : 'All options'}
+          </span>
+          <button type="button" onClick={() => setEntryPath(null)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}>
+            change
+          </button>
+        </div>
+      )}
+
+      {(entryPath === 'new' || entryPath === 'all') && (
+        <div style={{
+          display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center',
+          background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '10px',
+          padding: '14px 16px', marginBottom: '1.5rem'
+        }}>
+          <div style={{ flex: '1 1 300px' }}>
+            <strong style={{ color: 'var(--extreme-violet)' }}>Build it from discovery questions</strong>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              Vertical, sites, services, closets, and optional Segmented VRF — FACE assembles the project.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWizardMode(true)}
+            style={{
+              padding: '10px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
+              background: 'linear-gradient(135deg, #7D76F2, #5B059C)', color: 'white', fontWeight: 600
+            }}
+          >
+            🧙 Start From Scratch
+          </button>
+          <button
+            type="button"
+            onClick={handleLoadSample}
+            disabled={loadingSample}
+            style={{
+              padding: '10px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
+              background: 'linear-gradient(135deg, #00CC99, #00926b)', color: 'white', fontWeight: 600
+            }}
+          >
+            {loadingSample ? '⏳ Loading…' : '✨ Try Sample Data'}
+          </button>
+        </div>
+      )}
+
+      {(entryPath === 'migrate' || entryPath === 'all') && (
+        <div style={{
+          display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center',
+          background: 'var(--card-bg)', border: '1px solid var(--border-color)', borderRadius: '10px',
+          padding: '14px 16px', marginBottom: '1.5rem'
+        }}>
+          <div style={{ flex: '1 1 300px' }}>
+            <strong style={{ color: 'var(--extreme-violet)' }}>Have your data in a file?</strong>
+            <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+              Upload your filled FACE template below, or download a fresh one.
+              New features like Segmented VRF can be added on the Configure step — no matter how the project starts.
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadTemplate}
+            disabled={downloadingTemplate}
+            style={{
+              padding: '10px 18px', border: 'none', borderRadius: '8px', cursor: 'pointer',
+              background: 'linear-gradient(135deg, #7519F9, #5B059C)', color: 'white', fontWeight: 600
+            }}
+          >
+            {downloadingTemplate ? '⏳ Generating…' : '📥 Download Template'}
+          </button>
+        </div>
+      )}
+
+      {(entryPath === 'migrate' || entryPath === 'all') && (
       <form onSubmit={handleUpload}>
         <div
           className={`upload-area ${dragActive ? 'active' : ''}`}
@@ -310,6 +385,7 @@ function Upload({ onNext, onError }) {
           {loading ? <span>⏳ Processing...</span> : <span>📤 Upload & Parse</span>}
         </button>
       </form>
+      )}
     </div>
   );
 }

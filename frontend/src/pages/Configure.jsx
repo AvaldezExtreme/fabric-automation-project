@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import SegmentedVrfPanel, { defaultSegVrf, validateSegVrf } from '../components/SegmentedVrfPanel.jsx';
 import BulkImportModal from '../components/BulkImportModal';
 
 function Configure({ data, onNext, onError }) {
@@ -15,6 +16,21 @@ function Configure({ data, onNext, onError }) {
     wanLinkIp: '',
     wanLinkNetmask: '',
     ...(data.settings || {})
+  });
+
+  // Unique VLAN list across the project - lets ANY project (uploaded
+  // template, Excel, or wizard-built) opt into Segmented VRF here
+  const vlanServices = (() => {
+    const seen = new Map();
+    (data.switches || []).forEach(sw => (sw.vlans || []).forEach(v => {
+      if (!seen.has(v.vlanId)) seen.set(v.vlanId, { vlanId: v.vlanId, name: v.vlanName || v.name || `VLAN ${v.vlanId}`, deviceType: v.deviceType });
+    }));
+    return [...seen.values()].sort((a, b) => a.vlanId - b.vlanId);
+  })();
+
+  const [segVrf, setSegVrf] = useState(() => {
+    const saved = data.settings && data.settings.segmentedVrf;
+    return saved ? { ...defaultSegVrf(vlanServices), ...saved, enabled: true } : defaultSegVrf(vlanServices);
   });
 
   const handleSerialChange = (switchName, value) => {
@@ -102,10 +118,16 @@ function Configure({ data, onNext, onError }) {
       console.log('DEBUG Configure: serialMode =', serialMode);
       console.log('DEBUG Configure: structuredSerialMap =', structuredSerialMap);
 
+      const segErr = validateSegVrf(segVrf, vlanServices);
+      if (segErr) {
+        onError(segErr);
+        return;
+      }
+
       onNext({
         ...data,
         serialMap: structuredSerialMap,
-        settings,
+        settings: { ...settings, segmentedVrf: segVrf.enabled ? segVrf : null },
         skipSerials
       });
     }
@@ -362,6 +384,14 @@ function Configure({ data, onNext, onError }) {
 
       {/* NAVIGATION */}
       <div style={{ marginTop: '2rem' }}>
+      <div style={{ marginBottom: '2rem' }}>
+        <h3>🛡️ Segmented VRF (Fabric Engine 9.4+)</h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+          Available to every project - whether it came from the wizard, the template, or your own Excel file.
+        </p>
+        <SegmentedVrfPanel services={vlanServices} value={segVrf} onChange={setSegVrf} />
+      </div>
+
         <button onClick={handleNext} className="btn btn-primary">
           ✓ Continue to Review
         </button>
