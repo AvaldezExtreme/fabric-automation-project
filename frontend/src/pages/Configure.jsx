@@ -443,7 +443,7 @@ function Configure({ data, onNext, onError }) {
                   onChange={() => setSettings({ ...settings, enableSpbMulticast: val })} /> {lbl}
               </label>
             ))}
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Enabled: spb-multicast on L3 SVIs, IGMP snooping on L2 C-VLANs, global SPBM multicast enable</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Enabled: spb-multicast on L3 SVIs, Multicast config-lite on L2 C-VLANs (GRT), global SPBM enable</div>
           </div>
         </div>
       </div>

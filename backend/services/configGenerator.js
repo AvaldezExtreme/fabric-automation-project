@@ -288,11 +288,13 @@ banner motd "${location}"
     config += `i-sid name ${vlan.isid} ${vlan.isidName}\n`;
   });
 
-  // L2 VSN IP Multicast over Fabric Connect (FE 9.4 User Guide p.1980/1983):
-  // igmp snooping on an I-SID-mapped C-VLAN auto-enables fabric multicast for
-  // that L2 VSN - no other per-VSN config exists. The global SPBM multicast
-  // enable is still required (default disabled). Querier lives on the L3
-  // core SVIs (ip spb-multicast), so no snoop-querier-addr is needed here.
+  // IP Multicast config-lite (FE 9.4 User Guide p.1953/1964): the L2 edge
+  // joins ROUTED SPB multicast - the same mode as the L3 core's SVIs - with
+  // no IP address on the VLAN. mvpn-isid 0 = GRT scope (FACE designs route
+  // in the GRT; an L3VSN design would use that VSN's I-SID instead). This
+  // replaces per-VLAN igmp snooping, which is bridged-mode and whose 0.0.0.0
+  // querier would fight the L3 core's querier. No routed-spb-querier-addr
+  // per design decision. The global SPBM enable is still required.
   if (settings.enableSpbMulticast === true) {
     config += `
 ! IP Multicast over Fabric Connect - global enable (SPBM instance 1)
@@ -300,12 +302,12 @@ router isis
 spbm 1 multicast enable
 exit
 
-! IGMP snooping per C-VLAN (enables L2 VSN multicast over the fabric)
+! IP Multicast config-lite per C-VLAN (routed SPB multicast, GRT scope)
 `;
     l2Vlans.forEach(vlan => {
       config += `interface vlan ${vlan.vlanId}
-ip igmp proxy
-ip igmp snooping
+mvpn-isid 0
+ip spb-multicast enable
 exit
 `;
     });

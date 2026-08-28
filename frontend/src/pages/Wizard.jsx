@@ -385,7 +385,7 @@ function Wizard({ onComplete, onCancel }) {
                     <input type="radio" name="menv" checked={env.enableSpbMulticast === val} onChange={() => setEnv({ ...env, enableSpbMulticast: val })} /> {lbl}
                   </label>
                 ))}
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>L3: spb-multicast on SVIs · L2: IGMP snooping per C-VLAN + global SPBM enable</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>L3: spb-multicast on SVIs · L2: Multicast config-lite (mvpn-isid 0, GRT) + global SPBM enable</div>
               </div>
             </div>
           </div>
