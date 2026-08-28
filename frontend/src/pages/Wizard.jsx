@@ -379,13 +379,13 @@ function Wizard({ onComplete, onCancel }) {
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>FA-capable cameras → auto-sense fa camera line goes in; otherwise omitted</div>
               </div>
               <div>
-                <span style={{ ...S.label, color: 'var(--text-primary)' }}>IP Multicast (L3 / SPB)</span>
+                <span style={{ ...S.label, color: 'var(--text-primary)' }}>IP Multicast (L2 + L3 Fabric)</span>
                 {[['Enabled', true], ['Disabled', false]].map(([lbl, val]) => (
                   <label key={lbl} style={{ marginRight: '10px', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
                     <input type="radio" name="menv" checked={env.enableSpbMulticast === val} onChange={() => setEnv({ ...env, enableSpbMulticast: val })} /> {lbl}
                   </label>
                 ))}
-                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Gates ip spb-multicast enable on L3 interfaces — cleaner configs when off</div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>L3: spb-multicast on SVIs · L2: IGMP snooping per C-VLAN + global SPBM enable</div>
               </div>
             </div>
           </div>

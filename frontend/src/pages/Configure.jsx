@@ -436,14 +436,14 @@ function Configure({ data, onNext, onError }) {
             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>FA-capable cameras get the auto-sense fa camera line; others omit it</div>
           </div>
           <div>
-            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>IP Multicast (L3 / SPB)</div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>IP Multicast (L2 + L3 Fabric)</div>
             {[['Enabled', true], ['Disabled', false]].map(([lbl, val]) => (
               <label key={lbl} style={{ marginRight: '12px', fontSize: '0.85rem', cursor: 'pointer' }}>
                 <input type="radio" name="cfg-menv" checked={(settings.enableSpbMulticast !== false) === val}
                   onChange={() => setSettings({ ...settings, enableSpbMulticast: val })} /> {lbl}
               </label>
             ))}
-            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Gates ip spb-multicast enable on every L3 VLAN interface</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Enabled: spb-multicast on L3 SVIs, IGMP snooping on L2 C-VLANs, global SPBM multicast enable</div>
           </div>
         </div>
       </div>

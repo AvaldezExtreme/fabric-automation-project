@@ -116,6 +116,19 @@ exit
     config += `\n! Site-wide L2 VSNs carried without IP on this switch: VLAN ${l2OnlyVlans.join(', ')}\n`;
   }
 
+  // IP Multicast over Fabric Connect requires the global SPBM enable
+  // (default is disabled - FE 9.4 Cmd Ref: spbm <1-100> multicast enable).
+  // Only emitted when the user explicitly enabled multicast; legacy
+  // projects (flag absent) keep their historical output untouched.
+  if (settings.enableSpbMulticast === true) {
+    config += `
+! IP Multicast over Fabric Connect - global enable (SPBM instance 1)
+router isis
+spbm 1 multicast enable
+exit
+`;
+  }
+
   // Segmented VRF firewall link: the UNRESTRICTED path (L3 core <-> FW).
   // All inter-VLAN traffic the fabric denies is hairpinned through here.
   if (segVrf && segVrf.fwVlanId) {
@@ -274,7 +287,30 @@ banner motd "${location}"
   l2Vlans.forEach(vlan => {
     config += `i-sid name ${vlan.isid} ${vlan.isidName}\n`;
   });
-  
+
+  // L2 VSN IP Multicast over Fabric Connect (FE 9.4 User Guide p.1980/1983):
+  // igmp snooping on an I-SID-mapped C-VLAN auto-enables fabric multicast for
+  // that L2 VSN - no other per-VSN config exists. The global SPBM multicast
+  // enable is still required (default disabled). Querier lives on the L3
+  // core SVIs (ip spb-multicast), so no snoop-querier-addr is needed here.
+  if (settings.enableSpbMulticast === true) {
+    config += `
+! IP Multicast over Fabric Connect - global enable (SPBM instance 1)
+router isis
+spbm 1 multicast enable
+exit
+
+! IGMP snooping per C-VLAN (enables L2 VSN multicast over the fabric)
+`;
+    l2Vlans.forEach(vlan => {
+      config += `interface vlan ${vlan.vlanId}
+ip igmp proxy
+ip igmp snooping
+exit
+`;
+    });
+  }
+
  // Calculate dynamic L2 gateway: 10.{SiteID}.{MgmtVLAN}.1
   const dynamicL2Gateway = `10.${siteId}.${mgmtVlanId}.1`;
   
