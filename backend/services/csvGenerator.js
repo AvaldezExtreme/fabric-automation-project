@@ -4,10 +4,15 @@ export const generateSiteEngineCsv = (switches, serialMap = {}, skippedSerials =
   const records = [];
   
   switches.forEach(sw => {
-    // Get serial number from map or use placeholder
+    // Get serial number from map or use placeholder. Since v2.5 the map
+    // values are structured objects ({serial, serialNumber, siteId, ...}) -
+    // the CSV column must carry ONLY the serial string, never the object.
     const serialKey = sw.name;
-    let serialNumber = serialMap[serialKey] || `TBD-${sw.name}`;
-    
+    const rawSerial = serialMap[serialKey];
+    let serialNumber = typeof rawSerial === 'object' && rawSerial !== null
+      ? (rawSerial.serial || rawSerial.serialNumber || `TBD-${sw.name}`)
+      : (rawSerial || `TBD-${sw.name}`);
+
     // If serials were skipped, mark as TBD
     if (skippedSerials && !serialMap[serialKey]) {
       serialNumber = `TBD-${sw.name}`;
@@ -61,7 +66,10 @@ export const generateSiteEngineCsv = (switches, serialMap = {}, skippedSerials =
 
 export const validateSerialMap = (serialMap) => {
   for (const [key, value] of Object.entries(serialMap)) {
-    if (!value || value.trim() === '') {
+    const serial = typeof value === 'object' && value !== null
+      ? (value.serial || value.serialNumber || '')
+      : (value || '');
+    if (!String(serial).trim()) {
       throw new Error(`Serial number missing for switch: ${key}`);
     }
   }

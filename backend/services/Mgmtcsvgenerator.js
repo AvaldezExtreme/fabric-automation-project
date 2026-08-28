@@ -52,8 +52,9 @@ export const generateMgmtCsv = (switches, serials) => {
         // Get I-SID for management VLAN
         const mgmtIsid = mgmtVlanData ? mgmtVlanData.isid : `12${siteId}${mgmtVlan.toString().padStart(4, '0')}`;
         
-        // Get site name from location (remove spaces)
-        const siteName = switchData.location.replace(/\s+/g, '');
+        // Site name as a Site Engine path - same /World/<Location> convention
+        // as the Site Engine CSV (spaces kept; csv quoting handles them)
+        const siteName = switchData.location ? `/World/${switchData.location}` : '/World/Unknown';
         
         // Get serial number from various possible fields
         const serialNumber = serial.serialNumber || serial.serial || '';

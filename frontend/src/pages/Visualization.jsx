@@ -504,18 +504,20 @@ function Visualization({ data, onNext, onBack }) {
 
 function PDFContent({ sites, settings }) {
   return (
-    <div style={{ padding: '24px', fontFamily: "'DM Sans', Arial, sans-serif", width: '1350px', background: 'var(--card-bg)' }}>
-      <div className="pdf-site" style={{ textAlign: 'center', padding: '16px', background: 'var(--card-bg)' }}>
-        <h1 style={{ color: 'var(--extreme-violet)', marginBottom: '4px' }}>FACE — Network Topology Report</h1>
+    // PDF prints on white paper regardless of app theme - every color in
+    // here must be a literal print color, never a theme variable
+    <div style={{ padding: '24px', fontFamily: "'DM Sans', Arial, sans-serif", width: '1350px', background: '#ffffff' }}>
+      <div className="pdf-site" style={{ textAlign: 'center', padding: '16px', background: '#ffffff' }}>
+        <h1 style={{ color: '#7519F9', marginBottom: '4px' }}>FACE — Network Topology Report</h1>
         <p style={{ margin: 0, color: '#1f2937' }}>Fabric Auto Configuration Engine</p>
-        <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0' }}>Generated: {new Date().toLocaleString()}</p>
+        <p style={{ color: '#6b7280', margin: '4px 0 0' }}>Generated: {new Date().toLocaleString()}</p>
         <p style={{ color: '#4b5563', margin: '10px 0 0', fontSize: '13px' }}>
           {sites.length} site{sites.length === 1 ? '' : 's'} · {sites.reduce((n, s) => n + s.switches.length, 0)} switches
         </p>
       </div>
 
       {sites.map(site => (
-        <div key={site.id} className="pdf-site" style={{ marginBottom: '24px', background: 'var(--card-bg)', padding: '8px 0' }}>
+        <div key={site.id} className="pdf-site" style={{ marginBottom: '24px', background: '#ffffff', padding: '8px 0' }}>
           <h2 style={{ borderBottom: `3px solid ${BRAND.purple}`, paddingBottom: '8px', color: '#1f2937' }}>
             📍 {site.name} (Site {site.id})
           </h2>
@@ -567,7 +569,7 @@ function PDFContent({ sites, settings }) {
             </div>
           ))}
 
-          <div style={{ paddingTop: '8px', fontSize: '10px', color: 'var(--text-secondary)' }}>
+          <div style={{ paddingTop: '8px', fontSize: '10px', color: '#6b7280' }}>
             © 2026 Extreme Networks, Inc. | FACE — Fabric Auto Configuration Engine
           </div>
         </div>
