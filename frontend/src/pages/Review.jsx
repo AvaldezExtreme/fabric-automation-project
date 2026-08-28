@@ -7,6 +7,7 @@
 
 import React, { useState } from 'react';
 import { isMdfSwitch, buildClosetTopology } from '../utils/closetTopology.js';
+import { isFaDelivered, faDeliveredCount, FA_TOOLTIP } from '../utils/faDelivered.js';
 
 function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
   const [switches, setSwitches] = useState(data.switches);
@@ -157,7 +158,7 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
       >
         <strong>{sw.name}</strong>
         <span style={{ marginLeft: '1rem', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-          {sw.type} • {sw.vlans?.length || 0} VLANs{sw.closet ? ` • Closet: ${sw.closet}` : ''}
+          {sw.type} • {sw.vlans?.length || 0} VLANs{faDeliveredCount(sw, data.settings) > 0 ? ` (${faDeliveredCount(sw, data.settings)} via FA)` : ''}{sw.closet ? ` • Closet: ${sw.closet}` : ''}
           {selectedName !== sw.name && <span style={{ marginLeft: '0.5rem', color: 'var(--extreme-violet)' }}>▸ click to inspect</span>}
         </span>
       </div>
@@ -343,14 +344,24 @@ function Review({ data, onNext, onError, onUpdate, onEditingChange }) {
                   </thead>
                   <tbody>
                     {!editing ? (
-                      selectedSwitch.vlans.map((vlan, idx) => (
-                        <tr key={idx}>
-                          <td>{vlan.vlanId}</td>
-                          <td>{vlan.vlanName}</td>
-                          <td>{vlan.subnet}</td>
-                          <td>{vlan.isid}</td>
-                        </tr>
-                      ))
+                      selectedSwitch.vlans.map((vlan, idx) => {
+                        const fa = isFaDelivered(vlan, selectedSwitch, data.settings);
+                        return (
+                          <tr key={idx} style={fa ? { opacity: 0.55 } : undefined} title={fa ? FA_TOOLTIP : undefined}>
+                            <td>{vlan.vlanId}</td>
+                            <td>
+                              {vlan.vlanName}
+                              {fa && (
+                                <span style={{ marginLeft: '8px', fontSize: '0.68rem', fontWeight: 700, color: 'var(--extreme-violet)', border: '1px solid var(--extreme-violet)', borderRadius: '999px', padding: '1px 8px', whiteSpace: 'nowrap' }}>
+                                  📶 FA
+                                </span>
+                              )}
+                            </td>
+                            <td>{vlan.subnet}</td>
+                            <td>{vlan.isid}</td>
+                          </tr>
+                        );
+                      })
                     ) : (
                       draft.vlans.map((vlan, idx) => (
                         <tr key={idx}>

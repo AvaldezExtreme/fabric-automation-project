@@ -10,6 +10,7 @@ import React, { useState } from 'react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { buildClosetTopology } from '../utils/closetTopology.js';
+import { isFaDelivered, FA_TOOLTIP } from '../utils/faDelivered.js';
 
 // Extreme Networks approved palette (see ExtremeTheme.css)
 const BRAND = {
@@ -446,19 +447,28 @@ function Visualization({ data, onNext, onBack }) {
                 </h4>
                 <div style={styles.vlanList}>
                   {selectedSwitchData.vlans && selectedSwitchData.vlans.length > 0 ? (
-                    selectedSwitchData.vlans.map((vlan, idx) => (
-                      <div key={idx} style={styles.vlanItem}>
-                        <div style={styles.vlanHeader}>
-                          <span style={styles.vlanId}>VLAN {vlan.vlanId}</span>
-                          <span style={styles.vlanNameTag}>{vlan.vlanName || vlan.name || ''}</span>
+                    selectedSwitchData.vlans.map((vlan, idx) => {
+                      const fa = isFaDelivered(vlan, selectedSwitchData, data.settings);
+                      return (
+                        <div key={idx} style={fa ? { ...styles.vlanItem, opacity: 0.55 } : styles.vlanItem} title={fa ? FA_TOOLTIP : undefined}>
+                          <div style={styles.vlanHeader}>
+                            <span style={styles.vlanId}>VLAN {vlan.vlanId}</span>
+                            <span style={styles.vlanNameTag}>{vlan.vlanName || vlan.name || ''}</span>
+                            {fa && (
+                              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: 'var(--extreme-violet)', border: '1px solid var(--extreme-violet)', borderRadius: '999px', padding: '1px 7px', whiteSpace: 'nowrap' }}>
+                                📶 FA
+                              </span>
+                            )}
+                          </div>
+                          <div style={styles.vlanMeta}>
+                            I-SID {vlan.isid || vlan.i_sid || '—'}
+                            {vlan.subnet ? ` · ${vlan.subnet}` : ''}
+                            {vlan.ip ? ` · ${vlan.ip}` : ''}
+                            {fa ? ' · via Fabric Attach' : ''}
+                          </div>
                         </div>
-                        <div style={styles.vlanMeta}>
-                          I-SID {vlan.isid || vlan.i_sid || '—'}
-                          {vlan.subnet ? ` · ${vlan.subnet}` : ''}
-                          {vlan.ip ? ` · ${vlan.ip}` : ''}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div style={{ color: 'var(--text-secondary)' }}>No VLANs configured</div>
                   )}
@@ -472,7 +482,7 @@ function Visualization({ data, onNext, onBack }) {
       {/* Off-screen PDF content (html2canvas can't capture display:none) */}
       <div id="pdf-content" style={styles.pdfHolder}>
         {exportMode && (
-          <PDFContent sites={exportMode === 'all' ? sites : [currentSite]} />
+          <PDFContent sites={exportMode === 'all' ? sites : [currentSite]} settings={data.settings} />
         )}
       </div>
 
@@ -492,7 +502,7 @@ function Visualization({ data, onNext, onBack }) {
 // ---------- PDF report content ----------
 // Each .pdf-site block is captured as its own canvas (and PDF page set)
 
-function PDFContent({ sites }) {
+function PDFContent({ sites, settings }) {
   return (
     <div style={{ padding: '24px', fontFamily: "'DM Sans', Arial, sans-serif", width: '1350px', background: 'var(--card-bg)' }}>
       <div className="pdf-site" style={{ textAlign: 'center', padding: '16px', background: 'var(--card-bg)' }}>
@@ -531,16 +541,28 @@ function PDFContent({ sites }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {sw.vlans.map((v, idx) => (
-                      <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f6f0fc' }}>
-                        <td style={styles.tableCell}>{v.vlanId}</td>
-                        <td style={styles.tableCell}>{v.vlanName || v.name || ''}</td>
-                        <td style={styles.tableCell}>{v.isid || v.i_sid || '—'}</td>
-                        <td style={styles.tableCell}>{v.subnet || '—'}</td>
-                      </tr>
-                    ))}
+                    {sw.vlans.map((v, idx) => {
+                      const fa = isFaDelivered(v, sw, settings);
+                      const cell = fa ? { ...styles.tableCell, color: '#9ca3af' } : styles.tableCell;
+                      return (
+                        <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#fff' : '#f6f0fc' }}>
+                          <td style={cell}>{v.vlanId}</td>
+                          <td style={cell}>
+                            {v.vlanName || v.name || ''}
+                            {fa && <span style={{ marginLeft: '6px', fontSize: '9px', fontWeight: 700, color: '#7519F9' }}>📶 FA</span>}
+                          </td>
+                          <td style={cell}>{v.isid || v.i_sid || '—'}</td>
+                          <td style={cell}>{v.subnet || '—'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
+              )}
+              {(sw.vlans || []).some(v => isFaDelivered(v, sw, settings)) && (
+                <p style={{ fontSize: '9px', color: '#6b7280', margin: '4px 0 0' }}>
+                  📶 FA = delivered by Fabric Attach (Extreme wireless) — not configured on this switch.
+                </p>
               )}
             </div>
           ))}
