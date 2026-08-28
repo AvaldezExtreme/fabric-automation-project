@@ -497,16 +497,16 @@ function PDFContent({ sites }) {
     <div style={{ padding: '24px', fontFamily: "'DM Sans', Arial, sans-serif", width: '1350px', background: 'var(--card-bg)' }}>
       <div className="pdf-site" style={{ textAlign: 'center', padding: '16px', background: 'var(--card-bg)' }}>
         <h1 style={{ color: 'var(--extreme-violet)', marginBottom: '4px' }}>FACE — Network Topology Report</h1>
-        <p style={{ margin: 0 }}>Fabric Auto Configuration Engine</p>
+        <p style={{ margin: 0, color: '#1f2937' }}>Fabric Auto Configuration Engine</p>
         <p style={{ color: 'var(--text-secondary)', margin: '4px 0 0' }}>Generated: {new Date().toLocaleString()}</p>
-        <p style={{ color: '#666', margin: '10px 0 0', fontSize: '13px' }}>
+        <p style={{ color: '#4b5563', margin: '10px 0 0', fontSize: '13px' }}>
           {sites.length} site{sites.length === 1 ? '' : 's'} · {sites.reduce((n, s) => n + s.switches.length, 0)} switches
         </p>
       </div>
 
       {sites.map(site => (
         <div key={site.id} className="pdf-site" style={{ marginBottom: '24px', background: 'var(--card-bg)', padding: '8px 0' }}>
-          <h2 style={{ borderBottom: `3px solid ${BRAND.purple}`, paddingBottom: '8px' }}>
+          <h2 style={{ borderBottom: `3px solid ${BRAND.purple}`, paddingBottom: '8px', color: '#1f2937' }}>
             📍 {site.name} (Site {site.id})
           </h2>
 
@@ -516,7 +516,7 @@ function PDFContent({ sites }) {
 
           {site.switches.map(sw => (
             <div key={sw.name} style={{ marginBottom: '18px', paddingLeft: '16px', borderLeft: `4px solid ${BRAND.purple}` }}>
-              <h4 style={{ margin: '8px 0' }}>
+              <h4 style={{ margin: '8px 0', color: '#1f2937' }}>
                 {sw.name} — {sw.type === 'L3' ? 'Core (L3)' : 'Access (L2)'}
                 {sw.closet ? ` — ${sw.closet}` : ''}
               </h4>
@@ -746,7 +746,8 @@ const styles = {
   tableCell: {
     padding: '6px 10px',
     border: '1px solid #ddd',
-    textAlign: 'left'
+    textAlign: 'left',
+    color: '#1f2937'
   }
 };
 
