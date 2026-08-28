@@ -80,6 +80,10 @@ function Wizard({ onComplete, onCancel }) {
   const [sites, setSites] = useState([{ site: 10, code: '', location: '' }]);
   const [services, setServices] = useState([]);
   const [subnetTemplate, setSubnetTemplate] = useState('10.{site}.{vlan}.0/24');
+  const [subnetCustom, setSubnetCustom] = useState(false);
+  const [siteCount, setSiteCount] = useState('');
+  const [vlanCount, setVlanCount] = useState('');
+  const [env, setEnv] = useState({ extremeWireless: true, cameraFaCapable: true, enableSpbMulticast: true });
   const [closetsBySite, setClosetsBySite] = useState({}); // code -> [{name, count}]
   const [segVrf, setSegVrf] = useState({
     enabled: false, vrfName: 'segvrf', vrfId: 10,
@@ -93,8 +97,42 @@ function Wizard({ onComplete, onCancel }) {
 
   const pickVertical = (v) => {
     setVertical(v);
-    setServices(VERTICALS[v].services.map(s => ({ ...s })));
+    setServices(VERTICALS[v].services.map(s => ({ ...s, ssid: !!s.ssid })));
     setSegVrf(prev => ({ ...defaultSegVrf(VERTICALS[v].services), enabled: prev.enabled }));
+    // K-12 districts always have a Central Office - seed it as site #1
+    if (v === 'K-12') {
+      setSites([{ site: 1, code: 'CO', location: 'Central Office' }]);
+    }
+  };
+
+  // Resize the sites list to a requested count (preserves what's entered)
+  const applySiteCount = () => {
+    const n = parseInt(siteCount);
+    if (isNaN(n) || n < 1 || n > 98) { setError('Enter a count between 1 and 98'); return; }
+    setError('');
+    setSites(prev => {
+      const keep = prev.slice(0, n + (vertical === 'K-12' ? 1 : 0));
+      const out = [...keep];
+      let nextNum = Math.max(0, ...out.map(x => x.site || 0));
+      const target = n + (vertical === 'K-12' && out.some(x => x.code === 'CO') ? 1 : 0);
+      while (out.length < target) {
+        nextNum = Math.floor(nextNum / 10) * 10 + 10; // next clean multiple of 10
+        out.push({ site: nextNum, code: '', location: '' });
+      }
+      return out;
+    });
+  };
+
+  // Resize the VLAN services list to a requested count
+  const applyVlanCount = () => {
+    const n = parseInt(vlanCount);
+    if (isNaN(n) || n < 1 || n > 50) { setError('Enter a VLAN count between 1 and 50'); return; }
+    setError('');
+    setServices(prev => {
+      const out = prev.slice(0, n);
+      while (out.length < n) out.push({ vlanId: '', name: '', deviceType: '', ssid: false });
+      return out;
+    });
   };
 
   // ---------- validation per step ----------
@@ -108,6 +146,7 @@ function Wizard({ onComplete, onCancel }) {
       if (sites.length === 0) return setError(`Add at least one ${noun.toLowerCase()}`), false;
       for (const s of sites) {
         if (!s.code.trim()) return setError(`Every ${noun.toLowerCase()} needs a short code (e.g. LHS)`), false;
+        if (!/^[A-Za-z]{1,4}$/.test(s.code.trim())) return setError(`Code "${s.code}" must be LETTERS only, max 4 characters`), false;
         if (!s.site || s.site < 1 || s.site > 99) return setError('Site numbers must be 1-99 (they drive I-SIDs)'), false;
       }
       const nums = sites.map(s => s.site);
@@ -173,7 +212,8 @@ function Wizard({ onComplete, onCancel }) {
         isid: isidFor(site, parseInt(svc.vlanId)),
         isidName: `${code}-${svc.name.trim()}`,
         deviceType: svc.deviceType || null,
-        closet: ''
+        closet: '',
+        ssid: !!svc.ssid
       }));
       vlanCount += vlans.length;
 
@@ -185,7 +225,9 @@ function Wizard({ onComplete, onCancel }) {
       vlans.forEach(v => { if (v.deviceType && !typeMap[v.deviceType]) typeMap[v.deviceType] = v; });
       const autoSense = [];
       if (typeMap.data) autoSense.push({ type: 'data', command: `auto-sense data i-sid ${typeMap.data.isid}` });
-      if (typeMap.voice) autoSense.push({ type: 'voice', command: `auto-sense voice i-sid ${typeMap.voice.isid} c-vid ${(typeMap.data || typeMap.voice).vlanId}` });
+      // c-vid = the VOICE VLAN ID (FE 9.4 User Guide p.83-85: LLDP-MED
+      // advertises the voice VLAN; the phone tags voice traffic with it)
+      if (typeMap.voice) autoSense.push({ type: 'voice', command: `auto-sense voice i-sid ${typeMap.voice.isid} c-vid ${typeMap.voice.vlanId}` });
       if (typeMap.ap) autoSense.push({ type: 'ap', command: `auto-sense fa wap-type1 i-sid ${typeMap.ap.isid}` });
       if (typeMap.camera) autoSense.push({ type: 'camera', command: `auto-sense fa camera i-sid ${typeMap.camera.isid}` });
 
@@ -224,6 +266,9 @@ function Wizard({ onComplete, onCancel }) {
         vertical,
         fabricArchitecture: architecture,
         accessModel: 'site-wide',
+        extremeWireless: env.extremeWireless,
+        cameraFaCapable: env.cameraFaCapable,
+        enableSpbMulticast: env.enableSpbMulticast,
         segmentedVrf: segVrf.enabled ? { ...segVrf, fwVlanId: parseInt(segVrf.fwVlanId), vrfId: parseInt(segVrf.vrfId) } : null
       },
       skipSerials: false,
@@ -312,6 +357,39 @@ function Wizard({ onComplete, onCancel }) {
             </div>
           </div>
 
+          <div style={S.card}>
+            <span style={S.label}>Environment</span>
+            <div style={{ display: 'flex', gap: '18px', flexWrap: 'wrap' }}>
+              <div>
+                <span style={{ ...S.label, color: 'var(--text-primary)' }}>Wireless vendor</span>
+                {[['Extreme (Fabric Attach)', true], ['Other', false]].map(([lbl, val]) => (
+                  <label key={lbl} style={{ marginRight: '10px', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                    <input type="radio" name="wenv" checked={env.extremeWireless === val} onChange={() => setEnv({ ...env, extremeWireless: val })} /> {lbl}
+                  </label>
+                ))}
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Extreme wireless → SSID VLANs ride Fabric Attach, skipped on L2 switches</div>
+              </div>
+              <div>
+                <span style={{ ...S.label, color: 'var(--text-primary)' }}>Camera vendor</span>
+                {[['Verkada / Axis (≥12.0) / i-PRO', true], ['Other / none', false]].map(([lbl, val]) => (
+                  <label key={lbl} style={{ marginRight: '10px', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                    <input type="radio" name="cenv" checked={env.cameraFaCapable === val} onChange={() => setEnv({ ...env, cameraFaCapable: val })} /> {lbl}
+                  </label>
+                ))}
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>FA-capable cameras → auto-sense fa camera line goes in; otherwise omitted</div>
+              </div>
+              <div>
+                <span style={{ ...S.label, color: 'var(--text-primary)' }}>IP Multicast (L3 / SPB)</span>
+                {[['Enabled', true], ['Disabled', false]].map(([lbl, val]) => (
+                  <label key={lbl} style={{ marginRight: '10px', fontSize: '0.85rem', cursor: 'pointer', color: 'var(--text-primary)' }}>
+                    <input type="radio" name="menv" checked={env.enableSpbMulticast === val} onChange={() => setEnv({ ...env, enableSpbMulticast: val })} /> {lbl}
+                  </label>
+                ))}
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Gates ip spb-multicast enable on L3 interfaces — cleaner configs when off</div>
+              </div>
+            </div>
+          </div>
+
           <div style={{ ...S.card }}>
             <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
               ℹ️ The wizard builds <strong>site-wide VLAN</strong> designs (each site shares one VLAN set — the common case).
@@ -324,7 +402,14 @@ function Wizard({ onComplete, onCancel }) {
       {/* ============ STEP 1: SITES ============ */}
       {step === 1 && (
         <div style={S.card}>
-          <span style={S.label}>Your {noun.toLowerCase()}s — number drives I-SIDs and subnets, code drives switch names</span>
+          <span style={S.label}>Your {noun.toLowerCase()}s — number drives I-SIDs and subnets, code drives switch names (letters only, max 4)</span>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px', padding: '10px', background: 'var(--canvas-bg)', borderRadius: '8px' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              How many {noun.toLowerCase()}s do you have{vertical === 'K-12' ? ' (besides the Central Office)' : ''}?
+            </span>
+            <input style={{ ...S.smallInput, width: '70px' }} type="number" min="1" max="98" value={siteCount} onChange={e => setSiteCount(e.target.value)} />
+            <button style={S.addBtn} onClick={applySiteCount}>Create rows</button>
+          </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
               <th style={S.th}>Site #（1-99）</th><th style={S.th}>Code (e.g. LHS)</th><th style={S.th}>{noun} name</th><th style={S.th}></th>
@@ -333,7 +418,7 @@ function Wizard({ onComplete, onCancel }) {
               {sites.map((s, idx) => (
                 <tr key={idx}>
                   <td style={{ padding: '4px' }}><input style={S.smallInput} type="number" value={s.site} onChange={e => { const c = [...sites]; c[idx] = { ...c[idx], site: parseInt(e.target.value) || '' }; setSites(c); }} /></td>
-                  <td style={{ padding: '4px' }}><input style={{ ...S.input, width: '140px', textTransform: 'uppercase' }} value={s.code} onChange={e => { const c = [...sites]; c[idx] = { ...c[idx], code: e.target.value.toUpperCase() }; setSites(c); }} /></td>
+                  <td style={{ padding: '4px' }}><input style={{ ...S.input, width: '140px', textTransform: 'uppercase' }} maxLength={4} value={s.code} onChange={e => { const c = [...sites]; c[idx] = { ...c[idx], code: e.target.value.replace(/[^A-Za-z]/g, '').substring(0, 4).toUpperCase() }; setSites(c); }} /></td>
                   <td style={{ padding: '4px' }}><input style={S.input} placeholder={`e.g. Lincoln High ${noun}`} value={s.location} onChange={e => { const c = [...sites]; c[idx] = { ...c[idx], location: e.target.value }; setSites(c); }} /></td>
                   <td style={{ padding: '4px' }}><button style={S.del} onClick={() => setSites(sites.filter((_, i) => i !== idx))}>✕</button></td>
                 </tr>
@@ -353,9 +438,14 @@ function Wizard({ onComplete, onCancel }) {
         <div>
           <div style={S.card}>
             <span style={S.label}>VLAN services (pre-seeded for {vertical} — adjust freely)</span>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '12px', padding: '10px', background: 'var(--canvas-bg)', borderRadius: '8px' }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>How many VLANs per {noun.toLowerCase()}?</span>
+              <input style={{ ...S.smallInput, width: '70px' }} type="number" min="1" max="50" value={vlanCount} onChange={e => setVlanCount(e.target.value)} />
+              <button style={S.addBtn} onClick={applyVlanCount}>Create rows</button>
+            </div>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead><tr>
-                <th style={S.th}>VLAN ID</th><th style={S.th}>Name</th><th style={S.th}>Device type (drives auto-sense)</th><th style={S.th}></th>
+                <th style={S.th}>VLAN ID</th><th style={S.th}>Name</th><th style={S.th}>Device type (drives auto-sense)</th>{env.extremeWireless && <th style={S.th} title="Delivered by Fabric Attach - not configured on L2 switches">SSID VLAN?</th>}<th style={S.th}></th>
               </tr></thead>
               <tbody>
                 {services.map((svc, idx) => (
@@ -373,19 +463,56 @@ function Wizard({ onComplete, onCancel }) {
                         <option value="camera">camera (security)</option>
                       </select>
                     </td>
+                    {env.extremeWireless && (
+                      <td style={{ padding: '4px', textAlign: 'center' }}>
+                        <input type="checkbox" checked={!!svc.ssid} title="SSID VLAN - Fabric Attach adds it on L2 switches automatically"
+                          onChange={e => { const c = [...services]; c[idx] = { ...c[idx], ssid: e.target.checked }; setServices(c); }} />
+                      </td>
+                    )}
                     <td style={{ padding: '4px' }}><button style={S.del} onClick={() => setServices(services.filter((_, i) => i !== idx))}>✕</button></td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {env.extremeWireless && (
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '6px' }}>
+                📶 SSID VLANs are delivered by Fabric Attach on Extreme wireless — FACE will NOT configure them on L2 access switches (the APs signal them automatically). They stay on the L3 core for routing.
+              </div>
+            )}
             <div style={{ marginTop: '10px' }}>
-              <button style={S.addBtn} onClick={() => setServices([...services, { vlanId: '', name: '', deviceType: '' }])}>+ Add VLAN</button>
+              <button style={S.addBtn} onClick={() => setServices([...services, { vlanId: '', name: '', deviceType: '', ssid: false }])}>+ Add VLAN</button>
             </div>
           </div>
 
           <div style={S.card}>
-            <span style={S.label}>Subnet plan — tokens: {'{site}'}, {'{site+100}'}, {'{vlan}'}</span>
-            <input style={S.input} value={subnetTemplate} onChange={e => setSubnetTemplate(e.target.value)} />
+            <span style={S.label}>Subnet plan — pick your addressing format</span>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+              {['10.{site}.{vlan}.0/24', '172.{site}.{vlan}.0/24', '10.{vlan}.{site}.0/24'].map(preset => (
+                <button key={preset} type="button"
+                  onClick={() => { setSubnetTemplate(preset); setSubnetCustom(false); }}
+                  style={{
+                    padding: '8px 14px', borderRadius: '999px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
+                    border: (!subnetCustom && subnetTemplate === preset) ? '2px solid var(--extreme-violet)' : '1px solid var(--border-color)',
+                    background: (!subnetCustom && subnetTemplate === preset) ? 'rgba(117,25,249,0.12)' : 'var(--card-bg)',
+                    color: 'var(--text-primary)'
+                  }}>
+                  {preset.replace('{site}', 'SITE').replace('{vlan}', 'VLAN')}
+                </button>
+              ))}
+              <button type="button"
+                onClick={() => setSubnetCustom(true)}
+                style={{
+                  padding: '8px 14px', borderRadius: '999px', cursor: 'pointer', fontWeight: 600, fontSize: '0.85rem',
+                  border: subnetCustom ? '2px solid var(--extreme-violet)' : '1px solid var(--border-color)',
+                  background: subnetCustom ? 'rgba(117,25,249,0.12)' : 'var(--card-bg)',
+                  color: 'var(--text-primary)'
+                }}>
+                ✏️ Custom…
+              </button>
+            </div>
+            {subnetCustom && (
+              <input style={S.input} value={subnetTemplate} onChange={e => setSubnetTemplate(e.target.value)} placeholder="e.g. 10.{site+100}.{vlan}.0/24 — tokens: {site} {site+100} {vlan}" />
+            )}
             {sites[0] && services[0] && (
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '8px' }}>
                 Preview for {sites[0].code || 'first site'} (site {sites[0].site}):&nbsp;

@@ -371,7 +371,9 @@ const generateAutoSenseCommands = (deviceTypeMap) => {
   }
   
   if (deviceTypeMap.voice) {
-    const cVid = deviceTypeMap.data ? deviceTypeMap.data.vlanId : deviceTypeMap.voice.vlanId;
+    // c-vid = the VOICE VLAN ID (FE 9.4 User Guide p.83-85: LLDP-MED
+    // advertises the voice VLAN; the phone tags voice traffic with it)
+    const cVid = deviceTypeMap.voice.vlanId;
     commands.push({
       type: 'voice',
       command: `auto-sense voice i-sid ${deviceTypeMap.voice.isid} c-vid ${cVid}`

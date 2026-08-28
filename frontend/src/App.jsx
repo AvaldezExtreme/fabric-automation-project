@@ -176,7 +176,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.8.1 (V2608275)',
+      appVersion: 'v2.9 (V2608276)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -477,7 +477,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.8.1 (V2608275)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.9 (V2608276)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>

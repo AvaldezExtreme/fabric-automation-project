@@ -101,8 +101,7 @@ isis apply redistribute direct vrf ${segVrf.vrfName}
         config += `
 interface vlan ${vlan.vlanId}
 ${vrfLine}ip address ${gatewayIp} ${netmask}
-ip spb-multicast enable
-ip igmp upnp-filter
+${settings.enableSpbMulticast === false ? '' : 'ip spb-multicast enable\n'}ip igmp upnp-filter
 ip dhcp-relay
 enable
 ip dhcp-relay fwd-path ${settings.dhcpServer1 || '10.1.1.202'} enable
@@ -165,10 +164,17 @@ ip route 0.0.0.0 0.0.0.0 ${defaultGateway} weight 1
 
   // Auto-sense commands (only once!)
   if (switchData.autoSenseCommands && switchData.autoSenseCommands.length > 0) {
-    config += '! Auto-Sense Device Type Handling\n';
-    switchData.autoSenseCommands.forEach(cmd => {
-      config += cmd.command + '\n';
-    });
+    // Camera FA line only when the camera vendor supports Fabric Attach
+    // (Verkada, Axis >=12.0, i-PRO). Absent flag keeps legacy behavior.
+    const asCmds = switchData.autoSenseCommands.filter(
+      cmd => !(settings.cameraFaCapable === false && cmd.type === 'camera')
+    );
+    if (asCmds.length > 0) {
+      config += '! Auto-Sense Device Type Handling\n';
+      asCmds.forEach(cmd => {
+        config += cmd.command + '\n';
+      });
+    }
   }
   
   // WAN configuration if provided
@@ -216,6 +222,11 @@ banner motd "${location}"
 
   // Get management VLAN info - use MgmtVLAN column (Column Q) directly
   const vlansToConfig = switchData.vlans || [];
+  // Extreme wireless: SSID VLANs ride Fabric Attach — the APs signal them,
+  // so they are NOT configured statically on L2 access switches.
+  const skipSsid = settings.extremeWireless === true;
+  const l2Vlans = vlansToConfig.filter(v => !(skipSsid && v.ssid));
+  const ssidSkipped = vlansToConfig.filter(v => skipSsid && v.ssid);
   const mgmtVlanId = switchData.mgmtVlan ? parseInt(switchData.mgmtVlan) : 8; // Default to 8 if not specified
   
   // Find the VLAN object for the management VLAN
@@ -240,19 +251,22 @@ banner motd "${location}"
   
   // Create VLANs
   config += '! Create VLANs\n';
-  vlansToConfig.forEach(vlan => {
+  if (ssidSkipped.length > 0) {
+    config += `! SSID VLANs ${ssidSkipped.map(v => v.vlanId).join(', ')} omitted - delivered by Fabric Attach (Extreme wireless)\n`;
+  }
+  l2Vlans.forEach(vlan => {
     config += `vlan create ${vlan.vlanId} name ${vlan.vlanName} type port-mstprstp 0\n`;
   });
-  
+
   // I-SID mappings
   config += '\n! Map VLANs to I-SIDs\n';
-  vlansToConfig.forEach(vlan => {
+  l2Vlans.forEach(vlan => {
     config += `vlan i-sid ${vlan.vlanId} ${vlan.isid}\n`;
   });
-  
+
  // I-SID names
   config += '\n! I-SID Names\n';
-  vlansToConfig.forEach(vlan => {
+  l2Vlans.forEach(vlan => {
     config += `i-sid name ${vlan.isid} ${vlan.isidName}\n`;
   });
   
@@ -273,10 +287,17 @@ exit
 
   // Auto-sense commands (only once!)
   if (switchData.autoSenseCommands && switchData.autoSenseCommands.length > 0) {
-    config += '! Auto-Sense Device Type Handling\n';
-    switchData.autoSenseCommands.forEach(cmd => {
-      config += cmd.command + '\n';
-    });
+    // Camera FA line only when the camera vendor supports Fabric Attach
+    // (Verkada, Axis >=12.0, i-PRO). Absent flag keeps legacy behavior.
+    const asCmds = switchData.autoSenseCommands.filter(
+      cmd => !(settings.cameraFaCapable === false && cmd.type === 'camera')
+    );
+    if (asCmds.length > 0) {
+      config += '! Auto-Sense Device Type Handling\n';
+      asCmds.forEach(cmd => {
+        config += cmd.command + '\n';
+      });
+    }
   }
   
   config += `

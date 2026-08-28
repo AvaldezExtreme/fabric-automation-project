@@ -385,6 +385,45 @@ function Configure({ data, onNext, onError }) {
       {/* NAVIGATION */}
       <div style={{ marginTop: '2rem' }}>
       <div style={{ marginBottom: '2rem' }}>
+        <h3>🌐 Environment</h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+          These answers keep the .cfg files clean — only the commands your environment actually needs.
+        </p>
+        <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>Wireless vendor</div>
+            {[['Extreme (Fabric Attach)', true], ['Other', false]].map(([lbl, val]) => (
+              <label key={lbl} style={{ marginRight: '12px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                <input type="radio" name="cfg-wenv" checked={(settings.extremeWireless === true) === val}
+                  onChange={() => setSettings({ ...settings, extremeWireless: val })} /> {lbl}
+              </label>
+            ))}
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>SSID VLANs ride Fabric Attach — skipped on L2 access switches</div>
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>Camera vendor</div>
+            {[['Verkada / Axis (≥12.0) / i-PRO', true], ['Other / none', false]].map(([lbl, val]) => (
+              <label key={lbl} style={{ marginRight: '12px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                <input type="radio" name="cfg-cenv" checked={(settings.cameraFaCapable !== false) === val}
+                  onChange={() => setSettings({ ...settings, cameraFaCapable: val })} /> {lbl}
+              </label>
+            ))}
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>FA-capable cameras get the auto-sense fa camera line; others omit it</div>
+          </div>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>IP Multicast (L3 / SPB)</div>
+            {[['Enabled', true], ['Disabled', false]].map(([lbl, val]) => (
+              <label key={lbl} style={{ marginRight: '12px', fontSize: '0.85rem', cursor: 'pointer' }}>
+                <input type="radio" name="cfg-menv" checked={(settings.enableSpbMulticast !== false) === val}
+                  onChange={() => setSettings({ ...settings, enableSpbMulticast: val })} /> {lbl}
+              </label>
+            ))}
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Gates ip spb-multicast enable on every L3 VLAN interface</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '2rem' }}>
         <h3>🛡️ Segmented VRF (Fabric Engine 9.4+)</h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
           Available to every project - whether it came from the wizard, the template, or your own Excel file.
