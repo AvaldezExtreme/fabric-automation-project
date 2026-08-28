@@ -33,6 +33,17 @@ function Configure({ data, onNext, onError }) {
     return saved ? { ...defaultSegVrf(vlanServices), ...saved, enabled: true } : defaultSegVrf(vlanServices);
   });
 
+  // SSID VLANs (delivered by Fabric Attach on Extreme wireless) - seeded from
+  // saved settings and from wizard-flagged vlans, editable for ANY project
+  const [ssidVlanIds, setSsidVlanIds] = useState(() => {
+    const ids = new Set((data.settings && data.settings.ssidVlanIds) || []);
+    (data.switches || []).forEach(sw => (sw.vlans || []).forEach(v => { if (v.ssid) ids.add(v.vlanId); }));
+    return [...ids];
+  });
+  const toggleSsidVlan = (vlanId) => {
+    setSsidVlanIds(prev => prev.includes(vlanId) ? prev.filter(id => id !== vlanId) : [...prev, vlanId]);
+  };
+
   const handleSerialChange = (switchName, value) => {
     setSerialMap({
       ...serialMap,
@@ -127,7 +138,7 @@ function Configure({ data, onNext, onError }) {
       onNext({
         ...data,
         serialMap: structuredSerialMap,
-        settings: { ...settings, segmentedVrf: segVrf.enabled ? segVrf : null },
+        settings: { ...settings, ssidVlanIds, segmentedVrf: segVrf.enabled ? segVrf : null },
         skipSerials
       });
     }
@@ -399,6 +410,20 @@ function Configure({ data, onNext, onError }) {
               </label>
             ))}
             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>SSID VLANs ride Fabric Attach — skipped on L2 access switches</div>
+            {settings.extremeWireless === true && (
+              <div style={{ marginTop: '8px', padding: '8px 10px', background: 'var(--canvas-bg)', borderRadius: '8px', maxWidth: '360px' }}>
+                <div style={{ fontSize: '0.8rem', fontWeight: 600, marginBottom: '4px' }}>Which VLANs are allotted to SSIDs?</div>
+                {vlanServices.map(v => (
+                  <label key={v.vlanId} style={{ display: 'block', fontSize: '0.82rem', cursor: 'pointer', padding: '1px 0' }}>
+                    <input type="checkbox" checked={ssidVlanIds.includes(v.vlanId)} onChange={() => toggleSsidVlan(v.vlanId)} />
+                    {' '}VLAN {v.vlanId} — {v.name}
+                  </label>
+                ))}
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                  Checked VLANs stay on the L3 core (gateway + I-SID) but are NOT configured on L2 access switches — the APs add them via Fabric Attach.
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <div style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '4px' }}>Camera vendor</div>

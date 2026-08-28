@@ -223,11 +223,16 @@ banner motd "${location}"
   // Get management VLAN info - use MgmtVLAN column (Column Q) directly
   const vlansToConfig = switchData.vlans || [];
   // Extreme wireless: SSID VLANs ride Fabric Attach — the APs signal them,
-  // so they are NOT configured statically on L2 access switches.
+  // so they are NOT configured statically on L2 access switches. A VLAN is
+  // an SSID VLAN via the wizard flag (v.ssid) or the Configure-step picker
+  // (settings.ssidVlanIds), so Excel/template projects get this too.
   const skipSsid = settings.extremeWireless === true;
-  const l2Vlans = vlansToConfig.filter(v => !(skipSsid && v.ssid));
-  const ssidSkipped = vlansToConfig.filter(v => skipSsid && v.ssid);
   const mgmtVlanId = switchData.mgmtVlan ? parseInt(switchData.mgmtVlan) : 8; // Default to 8 if not specified
+  const pickedSsid = new Set(settings.ssidVlanIds || []);
+  // The mgmt VLAN can never be an SSID VLAN - the switch needs it to exist
+  const isSsid = (v) => v.vlanId !== mgmtVlanId && (!!v.ssid || pickedSsid.has(v.vlanId));
+  const l2Vlans = vlansToConfig.filter(v => !(skipSsid && isSsid(v)));
+  const ssidSkipped = vlansToConfig.filter(v => skipSsid && isSsid(v));
   
   // Find the VLAN object for the management VLAN
   const mgmtVlan = vlansToConfig.find(v => v.vlanId === mgmtVlanId);
