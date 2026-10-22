@@ -67,6 +67,19 @@ const ARCHITECTURES = [
   { key: 'hybrid', icon: '/icons/cloud.svg', title: 'Hybrid', desc: 'Mix of both - some sites on dark fiber (one fabric), others reached across ISP links (Fabric Extend).' }
 ];
 
+// Fabric Extend (FE 9.4 UG p.1316-1319): sites joined over an ISP by FE-IP
+// tunnels become ONE SPB fabric (unique I-SIDs everywhere), so a later move
+// to dark fiber only swaps the tunnel for a physical NNI - nothing else.
+const FE_BROUTER_VLAN = 4000; // internal VLAN behind the ISP brouter port
+const usesFabricExtend = (arch) => arch === 'extend' || arch === 'hybrid';
+const IP_RE = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
+const ipToInt = (ip) => ip.split('.').reduce((n, o) => (n << 8) + parseInt(o), 0) >>> 0;
+const sameSubnet = (ipCidr, gw) => {
+  const [ip, len] = ipCidr.split('/');
+  const mask = len === '0' ? 0 : (~0 << (32 - parseInt(len))) >>> 0;
+  return ((ipToInt(ip) & mask) >>> 0) === ((ipToInt(gw) & mask) >>> 0);
+};
+
 const pad = (n, w) => String(n).padStart(w, '0');
 const isidFor = (site, vlan) => parseInt(`2${pad(site, 2)}${pad(vlan, 4)}`);
 const subnetFor = (template, site, vlan) =>
@@ -153,6 +166,23 @@ function Wizard({ onComplete, onCancel }) {
       if (new Set(nums).size !== nums.length) return setError('Site numbers must be unique'), false;
       const codes = sites.map(s => s.code.trim().toUpperCase());
       if (new Set(codes).size !== codes.length) return setError('Site codes must be unique'), false;
+      if (usesFabricExtend(architecture)) {
+        if (sites.length < 2) return setError('Fabric Extend needs at least two sites (the hub plus one remote)'), false;
+        // The hub (row 1) terminates every tunnel; remotes need ISP details only when on FE
+        const endpoints = sites.filter((s, i) => i === 0 || s.link !== 'fiber');
+        if (endpoints.length < 2) return setError('Hybrid: set at least one site to "Fabric Extend"'), false;
+        for (const s of endpoints) {
+          const who = s.code || `site ${s.site}`;
+          if (!/^\d+\/\d+(\/\d+)?$/.test((s.wanPort || '').trim())) return setError(`${who}: ISP port must look like 1/48`), false;
+          const [ip, len] = (s.wanIp || '').trim().split('/');
+          if (!IP_RE.test(ip || '') || !(parseInt(len) >= 8 && parseInt(len) <= 31)) return setError(`${who}: ISP-facing IP must be like 203.0.113.2/30`), false;
+          if (!IP_RE.test((s.ispGw || '').trim())) return setError(`${who}: ISP gateway must be an IP address`), false;
+          if (!sameSubnet(s.wanIp.trim(), s.ispGw.trim())) return setError(`${who}: ISP gateway ${s.ispGw} is not in ${s.wanIp}`), false;
+          if (s.wanIp.trim().split('/')[0] === s.ispGw.trim()) return setError(`${who}: ISP-facing IP and gateway can't be the same`), false;
+        }
+        const wanIps = endpoints.map(s => s.wanIp.trim().split('/')[0]);
+        if (new Set(wanIps).size !== wanIps.length) return setError('Every site needs its own ISP-facing IP (they are the tunnel endpoints)'), false;
+      }
     }
     if (step === 2) {
       if (services.length === 0) return setError('Add at least one VLAN service'), false;
@@ -163,6 +193,7 @@ function Wizard({ onComplete, onCancel }) {
       }
       const ids = services.map(s => parseInt(s.vlanId));
       if (new Set(ids).size !== ids.length) return setError('VLAN IDs must be unique'), false;
+      if (usesFabricExtend(architecture) && ids.includes(FE_BROUTER_VLAN)) return setError(`VLAN ${FE_BROUTER_VLAN} is reserved for the Fabric Extend ISP port - pick another ID`), false;
     }
     if (step === 3) {
       for (const s of sites) {
@@ -171,6 +202,10 @@ function Wizard({ onComplete, onCancel }) {
         for (const c of closets) {
           if (!c.name.trim()) return setError('Every closet needs a name'), false;
           if (!c.count || c.count < 1) return setError('Every closet needs at least 1 switch'), false;
+        }
+        const isFeEndpoint = usesFabricExtend(architecture) && (s === sites[0] || s.link !== 'fiber');
+        if (isFeEndpoint && !closets.some(c => c.name.toUpperCase().includes('MDF'))) {
+          return setError(`${s.code} terminates a Fabric Extend tunnel - it needs an MDF closet (its first switch is the L3 core)`), false;
         }
       }
     }
@@ -255,6 +290,34 @@ function Wizard({ onComplete, onCancel }) {
         }
       });
     });
+
+    // Fabric Extend: hub-and-spoke FE-IP tunnels between site L3 cores.
+    // Row 1 is the hub (the Central Office for K-12); every FE remote gets
+    // one tunnel to the hub, the hub gets one per remote. Dark-fiber sites
+    // in a hybrid design get nothing here - their NNI comes up natively.
+    if (usesFabricExtend(architecture)) {
+      const hub = sites[0];
+      const remotes = sites.slice(1).filter(s => s.link !== 'fiber');
+      const coreOf = (s) => switches.find(sw => sw.siteId === parseInt(s.site) && sw.type === 'L3');
+      const feFor = (s, tunnels) => ({
+        wanPort: s.wanPort.trim(),
+        wanIp: s.wanIp.trim(),
+        ispGw: s.ispGw.trim(),
+        brouterVlan: FE_BROUTER_VLAN,
+        hub: s === hub,
+        tunnels
+      });
+      const tip = (s) => s.wanIp.trim().split('/')[0];
+      const code = (s) => s.code.trim().toUpperCase();
+      const hubCore = coreOf(hub);
+      if (hubCore && remotes.length > 0) {
+        hubCore.fabricExtend = feFor(hub, remotes.map((r, i) => ({ id: i + 1, destIp: tip(r), name: `FE-to-${code(r)}` })));
+      }
+      remotes.forEach(r => {
+        const core = coreOf(r);
+        if (core) core.fabricExtend = feFor(r, [{ id: 1, destIp: tip(hub), name: `FE-to-${code(hub)}` }]);
+      });
+    }
 
     onComplete({
       file: { name: `Wizard: ${districtName.trim()}` },
@@ -410,19 +473,52 @@ function Wizard({ onComplete, onCancel }) {
             <input style={{ ...S.smallInput, width: '70px' }} type="number" min="1" max="98" value={siteCount} onChange={e => setSiteCount(e.target.value)} />
             <button style={S.addBtn} onClick={applySiteCount}>Create rows</button>
           </div>
+          {usesFabricExtend(architecture) && (
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px', padding: '8px 10px', borderLeft: '3px solid var(--extreme-violet)', background: 'var(--canvas-bg)', borderRadius: '6px' }}>
+              🌐 <strong>Fabric Extend:</strong> row 1 is the <strong>hub</strong>{vertical === 'K-12' ? ' (Central Office)' : ''}. Each {architecture === 'hybrid' ? 'Fabric Extend ' : ''}{noun.toLowerCase()} gets an FE-IP tunnel across the ISP to the hub, and the whole district runs as <strong>one fabric</strong>. When dark fiber arrives later, you just replace a tunnel with a fiber NNI — no I-SID or VLAN changes.
+              {' '}Enter each site's ISP hand-off: the port on its L3 core, the IP the ISP gave it, and the ISP's gateway.
+            </div>
+          )}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>
-              <th style={S.th}>Site #（1-99）</th><th style={S.th}>Code (e.g. LHS)</th><th style={S.th}>{noun} name</th><th style={S.th}></th>
+              <th style={S.th}>Site #（1-99）</th><th style={S.th}>Code (e.g. LHS)</th><th style={S.th}>{noun} name</th>
+              {architecture === 'hybrid' && <th style={S.th}>Reached via</th>}
+              {usesFabricExtend(architecture) && <><th style={S.th}>ISP port</th><th style={S.th}>ISP-facing IP/prefix</th><th style={S.th}>ISP gateway</th></>}
+              <th style={S.th}></th>
             </tr></thead>
             <tbody>
-              {sites.map((s, idx) => (
+              {sites.map((s, idx) => {
+                const upd = (patch) => { const c = [...sites]; c[idx] = { ...c[idx], ...patch }; setSites(c); };
+                const isHub = idx === 0;
+                const needsWan = usesFabricExtend(architecture) && (isHub || s.link !== 'fiber');
+                return (
                 <tr key={idx}>
-                  <td style={{ padding: '4px' }}><input style={S.smallInput} type="number" value={s.site} onChange={e => { const c = [...sites]; c[idx] = { ...c[idx], site: parseInt(e.target.value) || '' }; setSites(c); }} /></td>
-                  <td style={{ padding: '4px' }}><input style={{ ...S.input, width: '140px', textTransform: 'uppercase' }} maxLength={4} value={s.code} onChange={e => { const c = [...sites]; c[idx] = { ...c[idx], code: e.target.value.replace(/[^A-Za-z]/g, '').substring(0, 4).toUpperCase() }; setSites(c); }} /></td>
-                  <td style={{ padding: '4px' }}><input style={S.input} placeholder={`e.g. Lincoln High ${noun}`} value={s.location} onChange={e => { const c = [...sites]; c[idx] = { ...c[idx], location: e.target.value }; setSites(c); }} /></td>
+                  <td style={{ padding: '4px' }}><input style={S.smallInput} type="number" value={s.site} onChange={e => upd({ site: parseInt(e.target.value) || '' })} /></td>
+                  <td style={{ padding: '4px' }}><input style={{ ...S.input, width: '140px', textTransform: 'uppercase' }} maxLength={4} value={s.code} onChange={e => upd({ code: e.target.value.replace(/[^A-Za-z]/g, '').substring(0, 4).toUpperCase() })} /></td>
+                  <td style={{ padding: '4px' }}><input style={S.input} placeholder={`e.g. Lincoln High ${noun}`} value={s.location} onChange={e => upd({ location: e.target.value })} /></td>
+                  {architecture === 'hybrid' && (
+                    <td style={{ padding: '4px' }}>
+                      {isHub ? <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--extreme-violet)' }}>Hub</span> : (
+                        <select style={S.smallInput} value={s.link === 'fiber' ? 'fiber' : 'extend'} onChange={e => upd({ link: e.target.value })}>
+                          <option value="extend">Fabric Extend (ISP)</option>
+                          <option value="fiber">Dark fiber</option>
+                        </select>
+                      )}
+                    </td>
+                  )}
+                  {usesFabricExtend(architecture) && (needsWan ? (
+                    <>
+                      <td style={{ padding: '4px' }}><input style={{ ...S.smallInput, width: '70px' }} placeholder="1/48" value={s.wanPort || ''} onChange={e => upd({ wanPort: e.target.value })} /></td>
+                      <td style={{ padding: '4px' }}><input style={{ ...S.smallInput, width: '140px' }} placeholder="203.0.113.2/30" value={s.wanIp || ''} onChange={e => upd({ wanIp: e.target.value })} /></td>
+                      <td style={{ padding: '4px' }}><input style={{ ...S.smallInput, width: '120px' }} placeholder="203.0.113.1" value={s.ispGw || ''} onChange={e => upd({ ispGw: e.target.value })} /></td>
+                    </>
+                  ) : (
+                    <td colSpan={3} style={{ padding: '4px', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>native fabric NNI — no tunnel needed</td>
+                  ))}
                   <td style={{ padding: '4px' }}><button style={S.del} onClick={() => setSites(sites.filter((_, i) => i !== idx))}>✕</button></td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
           <div style={{ marginTop: '10px' }}>

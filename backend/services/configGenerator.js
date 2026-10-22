@@ -151,6 +151,43 @@ exit
 `;
   }
 
+  // Fabric Extend (FE-IP over an ISP) - FE 9.4 UG p.1316-1319, CmdRef
+  // p.135/572/765. Joins this site's core into ONE SPB fabric with the other
+  // sites; migrating to dark fiber later = remove the logical-intf below and
+  // enable IS-IS on the fiber NNI. Tunnel source is the ISP brouter port IP on
+  // the GRT, kept separate from any IP-Shortcuts ip-source-address (UG p.1316).
+  // Host routes (not a default) steer only tunnel endpoints to the ISP.
+  const fe = switchData.fabricExtend;
+  if (fe && Array.isArray(fe.tunnels) && fe.tunnels.length > 0) {
+    const tunnelSrc = fe.wanIp.split('/')[0];
+    config += `
+! ============================================
+! Fabric Extend (FE-IP) - ${fe.hub ? 'HUB' : 'remote site'}, ${fe.tunnels.length} tunnel${fe.tunnels.length === 1 ? '' : 's'} across the ISP
+! ============================================
+! ISP hand-off (tunnel underlay)
+interface gigabitEthernet ${fe.wanPort}
+brouter port ${fe.wanPort} vlan ${fe.brouterVlan} subnet ${fe.wanIp} name ISP-WAN
+no shutdown
+exit
+
+! Reach remote tunnel endpoints through the ISP
+${fe.tunnels.map(t => `ip route ${t.destIp} 255.255.255.255 ${fe.ispGw} weight 1`).join('\n')}
+
+! FE tunnel source
+router isis
+ip-tunnel-source-address ${tunnelSrc}
+exit
+
+! FE-IP logical IS-IS interfaces
+${fe.tunnels.map(t => `logical-intf isis ${t.id} dest-ip ${t.destIp} name ${t.name}
+isis
+isis spbm 1
+isis enable
+exit`).join('\n')}
+
+`;
+  }
+
   // Management clip
   config += `
 ! Management CLIP
