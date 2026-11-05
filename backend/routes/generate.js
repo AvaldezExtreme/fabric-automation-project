@@ -4,6 +4,7 @@ import { generateSiteEngineCsv } from '../services/csvGenerator.js';
 import { generateXIQSEConfigs } from '../services/xiqseConfigGenerator.js';
 import { generateMgmtCsv } from '../services/Mgmtcsvgenerator.js';
 import { sanitizeFileName } from '../middleware/validation.js';
+import { logActivity } from '../services/db.js';
 
 const router = express.Router();
 
@@ -84,10 +85,13 @@ router.post('/csv', (req, res) => {
 router.post('/all', (req, res) => {
   try {
     const { switches, serialMap = {}, settings = {}, skipSerials = false, districtName = 'District' } = req.body;
-    
+
     if (!switches || !Array.isArray(switches) || switches.length === 0) {
       return res.status(400).json({ error: 'No switches provided' });
     }
+
+    // Accountability: who generated a package and its size - never the content
+    logActivity(req.user?.username || 'unknown', 'generate-package', `${String(districtName).substring(0, 60)} - ${switches.length} switches`);
     
     // Generate L2/L3 configs
     const configs = {};

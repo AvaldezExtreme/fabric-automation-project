@@ -1,3 +1,15 @@
+// Management access policy (Claudio, 2026-11-05): SSH only - no Telnet;
+// web management HTTPS only - never HTTP. FE 9.4 CmdRef p.395 (sshd flag),
+// p.396 (telnetd flag), p.685 (ssh), p.750 (web-server), p.753 (secure-only).
+const MGMT_ACCESS = `! Management access - SSH only (no Telnet), web server HTTPS only (no HTTP)
+boot config flags sshd
+ssh
+no boot config flags telnetd
+web-server enable
+web-server secure-only
+
+`;
+
 export const generateL3Config = (switchData, settings = {}) => {
   const siteId = switchData.siteId;
   const switchName = switchData.name;
@@ -25,6 +37,7 @@ configure terminal
 prompt ${switchName}
 
 `;
+  config += MGMT_ACCESS;
 
   // Build VLAN creation commands
   const vlansToConfig = switchData.vlans || [];
@@ -273,6 +286,7 @@ banner displaymotd
 banner motd "${location}"
 
 `;
+  config += MGMT_ACCESS;
 
   // Get management VLAN info - use MgmtVLAN column (Column Q) directly
   const vlansToConfig = switchData.vlans || [];

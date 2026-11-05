@@ -8,6 +8,8 @@ import Validate from './pages/Validate';
 import Visualization from './pages/Visualization';
 import Simulation from './pages/Simulation';
 import tokenService from './services/tokenService.js';
+import Join from './pages/Join';
+import { AdminPanel, ChangePasswordPanel } from './components/AccountsPanel.jsx';
 import apiService from './services/apiService.js';
 import './styles/ExtremeTheme.css';
 import './styles/App.css';
@@ -24,6 +26,7 @@ function App() {
     return saved === 'dark' ? 'dark' : 'light';
   });
   const [showThemeMenu, setShowThemeMenu] = useState(false);
+  const [accountsPanel, setAccountsPanel] = useState(null); // 'admin' | 'password' | null
   const [data, setData] = useState({
     file: null,
     vlanCount: 0,
@@ -176,7 +179,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.10.1 (V2610222)',
+      appVersion: 'v2.11 (V2611051)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -264,6 +267,12 @@ function App() {
   const handleError = (errorMsg) => {
     setError(errorMsg);
   };
+
+  // Single-use invite links land here before any login
+  const joinMatch = window.location.pathname.match(/^\/join\/([A-Za-z0-9_-]+)\/?$/);
+  if (joinMatch && !authenticated) {
+    return <Join token={joinMatch[1]} onJoined={handleLogin} />;
+  }
 
   if (!authenticated) {
     return <Login onLoginSuccess={handleLogin} />;
@@ -355,9 +364,16 @@ function App() {
               )}
             </div>
 
+            {user.role === 'admin' && (
+              <button onClick={() => setAccountsPanel('admin')} title="Customer access - invites, users, activity" style={headerCircle}>👥</button>
+            )}
+            {user.role === 'customer' && (
+              <button onClick={() => setAccountsPanel('password')} title="Change your password" style={headerCircle}>🔑</button>
+            )}
+
             <a href="mailto:support@extremenetworks.com" title="Help & support" style={{ ...headerCircle, textDecoration: 'none', fontWeight: 700, fontSize: '15px' }}>?</a>
 
-            <button onClick={handleLogout} title={`Sign out ${user.username}`} style={{
+            <button onClick={handleLogout} title={`Sign out ${user.username}${user.org ? ` (${user.org})` : ''}`} style={{
               ...headerCircle,
               background: hdrDark ? '#e5e7eb' : '#26282E',
               color: hdrDark ? '#26282E' : '#ffffff',
@@ -368,6 +384,9 @@ function App() {
           </div>
         </div>
       </header>
+
+      {accountsPanel === 'admin' && <AdminPanel onClose={() => setAccountsPanel(null)} />}
+      {accountsPanel === 'password' && <ChangePasswordPanel onClose={() => setAccountsPanel(null)} />}
 
       {/* Main Content */}
       <div className="app-main">
@@ -477,7 +496,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.10.1 (V2610222)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.11 (V2611051)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>

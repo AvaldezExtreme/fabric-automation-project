@@ -11,6 +11,8 @@ import authRoutes from './routes/auth.js';
 import validateRoutes from './routes/validate.js';
 import templateRoutes from './routes/template.js';
 import { authMiddleware } from './middleware/authMiddleware.js';
+import { joinRouter, accountRouter, adminRouter } from './routes/accounts.js';
+import { dbReady } from './services/db.js';
 
 const app = express();
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -88,6 +90,13 @@ app.use((req, res, next) => {
 
 // ===== PUBLIC ROUTES (NO AUTH REQUIRED) =====
 app.use('/api/auth', loginLimiter, authRoutes);
+
+// Invite links (public, but tokens are single-use + rate limited)
+const joinLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false });
+app.use('/api/join', joinLimiter, joinRouter);
+app.use('/api/account', accountRouter);
+app.use('/api/admin', adminRouter);
+dbReady();
 
 // Health check (public)
 app.get('/health', (req, res) => {

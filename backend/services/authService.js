@@ -6,6 +6,8 @@
 
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import { query, logActivity } from './db.js';
 
 class AuthService {
   constructor() {
@@ -31,7 +33,9 @@ class AuthService {
         userMap.set(username.trim(), {
           username: username.trim(),
           passwordHash: this.hashPassword(password.trim()),
-          role: 'user'
+          // VALID_USERS accounts are the tool owner's - the only admins.
+          // Customer accounts live in the DB with role 'customer'.
+          role: 'admin'
         });
       }
     });
@@ -44,27 +48,43 @@ class AuthService {
     return crypto.createHash('sha256').update(password).digest('hex');
   }
 
-  // Authenticate user with username and password
-  authenticate(username, password) {
+  // Authenticate: env admin first, then DB customer accounts
+  // record=false: just verify the password (e.g. change-password), no
+  // last-login update and no 'login' entry in the activity log
+  async authenticate(username, password, { record = true } = {}) {
     if (!username || !password) {
       throw new Error('Username and password required');
     }
+    const name = username.trim();
 
-    const user = this.users.get(username.trim());
-    if (!user) {
-      throw new Error('Invalid credentials');
+    const admin = this.users.get(name);
+    if (admin) {
+      const a = Buffer.from(admin.passwordHash);
+      const b = Buffer.from(this.hashPassword(password));
+      if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('Invalid credentials');
+      return { username: admin.username, role: admin.role, email: `${admin.username}@extremenetworks.com` };
     }
 
-    const passwordHash = this.hashPassword(password);
-    if (user.passwordHash !== passwordHash) {
-      throw new Error('Invalid credentials');
+    let row = null;
+    try {
+      const r = await query('SELECT id, username, org, password_hash, role, enabled FROM face_users WHERE LOWER(username) = LOWER($1)', [name]);
+      row = r.rows[0];
+    } catch (err) {
+      if (err.message !== 'ACCOUNTS_DB_UNAVAILABLE') console.error('login lookup failed:', err.message);
     }
+    if (!row || !(await bcrypt.compare(password, row.password_hash))) throw new Error('Invalid credentials');
+    if (!row.enabled) throw new Error('This account has been disabled - contact your Extreme Networks SE');
 
-    return {
-      username: user.username,
-      role: user.role,
-      email: `${user.username}@extremenetworks.com`
-    };
+    if (record) {
+      await query('UPDATE face_users SET last_login_at = NOW() WHERE id = $1', [row.id]);
+      await logActivity(row.username, 'login', row.org);
+    }
+    return { username: row.username, role: row.role, org: row.org, email: '' };
+  }
+
+  // Customer passwords: bcrypt (env admin keeps its existing scheme)
+  async hashCustomerPassword(password) {
+    return bcrypt.hash(password, 12);
   }
 
   // Generate JWT token
@@ -73,6 +93,7 @@ class AuthService {
       {
         username: userData.username,
         role: userData.role,
+        org: userData.org,
         email: userData.email,
         iat: Math.floor(Date.now() / 1000)
       },

@@ -12,7 +12,7 @@ const router = express.Router();
 
 // POST /api/auth/login
 // Authenticate user and return JWT token
-router.post('/login', (req, res) => {
+router.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -22,7 +22,7 @@ router.post('/login', (req, res) => {
       });
     }
 
-    const user = authService.authenticate(username, password);
+    const user = await authService.authenticate(username, password);
     const token = authService.generateToken(user);
 
     res.json({
@@ -31,7 +31,8 @@ router.post('/login', (req, res) => {
       user: {
         username: user.username,
         email: user.email,
-        role: user.role
+        role: user.role,
+        org: user.org || null
       }
     });
   } catch (error) {
