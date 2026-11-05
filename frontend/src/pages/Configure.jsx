@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import SegmentedVrfPanel, { defaultSegVrf, validateSegVrf } from '../components/SegmentedVrfPanel.jsx';
 import BulkImportModal from '../components/BulkImportModal';
+import { FE_MTU_NOTE, FE_PLATFORM_NOTE, validateFabricExtend, applyFabricExtend, cfgFromSwitches, feEndpointIds } from '../utils/fabricExtend.js';
 
 function Configure({ data, onNext, onError }) {
   // Initialize from saved/previous data so revisiting this step (or resuming
@@ -43,6 +44,24 @@ function Configure({ data, onNext, onError }) {
   const toggleSsidVlan = (vlanId) => {
     setSsidVlanIds(prev => prev.includes(vlanId) ? prev.filter(id => id !== vlanId) : [...prev, vlanId]);
   };
+
+  // Fabric Extend - available to ANY project. Sites come from the parsed
+  // switches; wizard projects (switches already carrying fabricExtend) open
+  // pre-filled, everything else starts off.
+  const feSites = (() => {
+    const seen = new Map();
+    (data.switches || []).forEach(sw => {
+      if (!seen.has(sw.siteId)) seen.set(sw.siteId, { siteId: sw.siteId, label: sw.isidPrefix || sw.serviceApp || `Site ${sw.siteId}`, location: sw.location || '' });
+    });
+    return [...seen.values()].sort((a, b) => a.siteId - b.siteId);
+  })();
+  const [feCfg, setFeCfg] = useState(() => {
+    const existing = cfgFromSwitches(data.switches || []);
+    if (existing) return existing;
+    const hub = feSites.find(s => /^CO$/i.test(s.label)) || feSites[0];
+    return { enabled: false, hubSiteId: hub ? hub.siteId : null, sites: {} };
+  });
+  const setFeSite = (siteId, patch) => setFeCfg(prev => ({ ...prev, sites: { ...prev.sites, [siteId]: { ...(prev.sites[siteId] || {}), ...patch } } }));
 
   const handleSerialChange = (switchName, value) => {
     setSerialMap({
@@ -135,8 +154,17 @@ function Configure({ data, onNext, onError }) {
         return;
       }
 
+      const feErr = validateFabricExtend(feCfg, feSites, data.switches, vlanServices.map(v => v.vlanId));
+      if (feErr) {
+        onError(feErr);
+        return;
+      }
+
       onNext({
         ...data,
+        // FE tunnels live on the site cores; rebuilt every time so turning
+        // FE off (or changing a site) never leaves a stale tunnel behind
+        switches: applyFabricExtend(data.switches, feCfg, feSites),
         serialMap: structuredSerialMap,
         settings: { ...settings, ssidVlanIds, segmentedVrf: segVrf.enabled ? segVrf : null },
         skipSerials
@@ -446,6 +474,76 @@ function Configure({ data, onNext, onError }) {
             <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Enabled: spb-multicast on L3 SVIs, Multicast config-lite on L2 C-VLANs (GRT), global SPBM enable</div>
           </div>
         </div>
+      </div>
+
+      <div style={{ marginBottom: '2rem' }}>
+        <h3>🌐 Fabric Extend (sites connected across an ISP)</h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
+          No dark fiber between some sites? Fabric Extend tunnels each site to a hub across the ISP so the whole district runs as <strong>one fabric</strong>.
+          When dark fiber arrives later, that site just swaps its tunnel for a fiber link — no I-SID, VLAN or subnet changes. {FE_PLATFORM_NOTE}
+        </p>
+        {feSites.length < 2 ? (
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>This project has a single site — Fabric Extend needs at least two.</div>
+        ) : (
+          <>
+            <label style={{ fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}>
+              <input type="checkbox" checked={!!feCfg.enabled} onChange={e => setFeCfg({ ...feCfg, enabled: e.target.checked })} />
+              {' '}Connect sites with Fabric Extend
+            </label>
+            {feCfg.enabled && (
+              <div style={{ marginTop: '0.75rem' }}>
+                <div style={{ fontSize: '0.8rem', marginBottom: '8px', padding: '8px 10px', borderLeft: '3px solid #f59e0b', background: 'var(--canvas-bg)', borderRadius: '6px' }}>
+                  ⚠️ <strong>MTU:</strong> {FE_MTU_NOTE}
+                </div>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Site</th><th>Role</th><th>ISP port</th><th>ISP-facing IP/prefix</th><th>ISP gateway</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feSites.map(site => {
+                      const s = feCfg.sites[site.siteId] || {};
+                      const isHub = site.siteId === feCfg.hubSiteId;
+                      const needsWan = feEndpointIds(feCfg, [site.siteId]).length === 1;
+                      const inp = { padding: '4px 6px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '0.85rem' };
+                      return (
+                        <tr key={site.siteId}>
+                          <td><strong>{site.label}</strong> <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>· Site {site.siteId}{site.location ? ` · ${site.location}` : ''}</span></td>
+                          <td>
+                            <select style={inp} value={isHub ? 'hub' : (s.link === 'fiber' ? 'fiber' : 'extend')}
+                              onChange={e => {
+                                if (e.target.value === 'hub') setFeCfg({ ...feCfg, hubSiteId: site.siteId });
+                                else {
+                                  // demoting the hub: promote the first other site so there is always one
+                                  const next = { ...feCfg, sites: { ...feCfg.sites, [site.siteId]: { ...s, link: e.target.value } } };
+                                  if (isHub) next.hubSiteId = (feSites.find(x => x.siteId !== site.siteId) || {}).siteId;
+                                  setFeCfg(next);
+                                }
+                              }}>
+                              <option value="hub">Hub</option>
+                              <option value="extend">Fabric Extend (ISP)</option>
+                              <option value="fiber">Dark fiber</option>
+                            </select>
+                          </td>
+                          {needsWan ? (
+                            <>
+                              <td><input style={{ ...inp, width: '70px' }} placeholder="1/48" value={s.wanPort || ''} onChange={e => setFeSite(site.siteId, { wanPort: e.target.value })} /></td>
+                              <td><input style={{ ...inp, width: '140px' }} placeholder="203.0.113.2/30" value={s.wanIp || ''} onChange={e => setFeSite(site.siteId, { wanIp: e.target.value })} /></td>
+                              <td><input style={{ ...inp, width: '120px' }} placeholder="203.0.113.1" value={s.ispGw || ''} onChange={e => setFeSite(site.siteId, { ispGw: e.target.value })} /></td>
+                            </>
+                          ) : (
+                            <td colSpan={3} style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>native fabric NNI — no tunnel needed</td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       <div style={{ marginBottom: '2rem' }}>

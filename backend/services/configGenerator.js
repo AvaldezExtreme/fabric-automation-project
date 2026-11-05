@@ -163,6 +163,10 @@ exit
     config += `
 ! ============================================
 ! Fabric Extend (FE-IP) - ${fe.hub ? 'HUB' : 'remote site'}, ${fe.tunnels.length} tunnel${fe.tunnels.length === 1 ? '' : 's'} across the ISP
+! MTU: confirm the end-to-end path MTU with the ISP before cutover - the
+! tunnel adds overhead on top of customer frames (system MTU default 1950).
+! Have the ISP raise the path MTU to fit; the logical-intf IS-IS MTU
+! (default 1600, range 750-1600) only covers IS-IS packets (UG p.1312).
 ! ============================================
 ! ISP hand-off (tunnel underlay)
 interface gigabitEthernet ${fe.wanPort}

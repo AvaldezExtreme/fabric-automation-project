@@ -8,6 +8,7 @@
 
 import React, { useState } from 'react';
 import SegmentedVrfPanel, { defaultSegVrf, validateSegVrf } from '../components/SegmentedVrfPanel.jsx';
+import { FE_BROUTER_VLAN, FE_MTU_NOTE, FE_PLATFORM_NOTE, validateFabricExtend, applyFabricExtend } from '../utils/fabricExtend.js';
 
 const BRAND = {
   purple: '#5B059C', indigo: '#20004C', violet: '#7519F9',
@@ -67,18 +68,18 @@ const ARCHITECTURES = [
   { key: 'hybrid', icon: '/icons/cloud.svg', title: 'Hybrid', desc: 'Mix of both - some sites on dark fiber (one fabric), others reached across ISP links (Fabric Extend).' }
 ];
 
-// Fabric Extend (FE 9.4 UG p.1316-1319): sites joined over an ISP by FE-IP
-// tunnels become ONE SPB fabric (unique I-SIDs everywhere), so a later move
-// to dark fiber only swaps the tunnel for a physical NNI - nothing else.
-const FE_BROUTER_VLAN = 4000; // internal VLAN behind the ISP brouter port
+// Fabric Extend (FE 9.4 UG p.1316-1319): see utils/fabricExtend.js
 const usesFabricExtend = (arch) => arch === 'extend' || arch === 'hybrid';
-const IP_RE = /^(25[0-5]|2[0-4]\d|1?\d?\d)(\.(25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
-const ipToInt = (ip) => ip.split('.').reduce((n, o) => (n << 8) + parseInt(o), 0) >>> 0;
-const sameSubnet = (ipCidr, gw) => {
-  const [ip, len] = ipCidr.split('/');
-  const mask = len === '0' ? 0 : (~0 << (32 - parseInt(len))) >>> 0;
-  return ((ipToInt(ip) & mask) >>> 0) === ((ipToInt(gw) & mask) >>> 0);
-};
+// Wizard sites table -> shared FE cfg (row 1 is the hub)
+const feCfgFromSites = (sites) => ({
+  enabled: true,
+  hubSiteId: parseInt(sites[0].site),
+  sites: Object.fromEntries(sites.map((s, i) => [parseInt(s.site), {
+    link: i === 0 ? 'extend' : (s.link === 'fiber' ? 'fiber' : 'extend'),
+    wanPort: s.wanPort || '', wanIp: s.wanIp || '', ispGw: s.ispGw || ''
+  }]))
+});
+const feSiteList = (sites) => sites.map(s => ({ siteId: parseInt(s.site), label: s.code.trim().toUpperCase() || `site ${s.site}` }));
 
 const pad = (n, w) => String(n).padStart(w, '0');
 const isidFor = (site, vlan) => parseInt(`2${pad(site, 2)}${pad(vlan, 4)}`);
@@ -167,21 +168,9 @@ function Wizard({ onComplete, onCancel }) {
       const codes = sites.map(s => s.code.trim().toUpperCase());
       if (new Set(codes).size !== codes.length) return setError('Site codes must be unique'), false;
       if (usesFabricExtend(architecture)) {
-        if (sites.length < 2) return setError('Fabric Extend needs at least two sites (the hub plus one remote)'), false;
-        // The hub (row 1) terminates every tunnel; remotes need ISP details only when on FE
-        const endpoints = sites.filter((s, i) => i === 0 || s.link !== 'fiber');
-        if (endpoints.length < 2) return setError('Hybrid: set at least one site to "Fabric Extend"'), false;
-        for (const s of endpoints) {
-          const who = s.code || `site ${s.site}`;
-          if (!/^\d+\/\d+(\/\d+)?$/.test((s.wanPort || '').trim())) return setError(`${who}: ISP port must look like 1/48`), false;
-          const [ip, len] = (s.wanIp || '').trim().split('/');
-          if (!IP_RE.test(ip || '') || !(parseInt(len) >= 8 && parseInt(len) <= 31)) return setError(`${who}: ISP-facing IP must be like 203.0.113.2/30`), false;
-          if (!IP_RE.test((s.ispGw || '').trim())) return setError(`${who}: ISP gateway must be an IP address`), false;
-          if (!sameSubnet(s.wanIp.trim(), s.ispGw.trim())) return setError(`${who}: ISP gateway ${s.ispGw} is not in ${s.wanIp}`), false;
-          if (s.wanIp.trim().split('/')[0] === s.ispGw.trim()) return setError(`${who}: ISP-facing IP and gateway can't be the same`), false;
-        }
-        const wanIps = endpoints.map(s => s.wanIp.trim().split('/')[0]);
-        if (new Set(wanIps).size !== wanIps.length) return setError('Every site needs its own ISP-facing IP (they are the tunnel endpoints)'), false;
+        // switches don't exist yet - the "has an L3 core" check runs on the Closets step
+        const feErr = validateFabricExtend(feCfgFromSites(sites), feSiteList(sites), null);
+        if (feErr) return setError(feErr), false;
       }
     }
     if (step === 2) {
@@ -291,38 +280,16 @@ function Wizard({ onComplete, onCancel }) {
       });
     });
 
-    // Fabric Extend: hub-and-spoke FE-IP tunnels between site L3 cores.
-    // Row 1 is the hub (the Central Office for K-12); every FE remote gets
-    // one tunnel to the hub, the hub gets one per remote. Dark-fiber sites
-    // in a hybrid design get nothing here - their NNI comes up natively.
-    if (usesFabricExtend(architecture)) {
-      const hub = sites[0];
-      const remotes = sites.slice(1).filter(s => s.link !== 'fiber');
-      const coreOf = (s) => switches.find(sw => sw.siteId === parseInt(s.site) && sw.type === 'L3');
-      const feFor = (s, tunnels) => ({
-        wanPort: s.wanPort.trim(),
-        wanIp: s.wanIp.trim(),
-        ispGw: s.ispGw.trim(),
-        brouterVlan: FE_BROUTER_VLAN,
-        hub: s === hub,
-        tunnels
-      });
-      const tip = (s) => s.wanIp.trim().split('/')[0];
-      const code = (s) => s.code.trim().toUpperCase();
-      const hubCore = coreOf(hub);
-      if (hubCore && remotes.length > 0) {
-        hubCore.fabricExtend = feFor(hub, remotes.map((r, i) => ({ id: i + 1, destIp: tip(r), name: `FE-to-${code(r)}` })));
-      }
-      remotes.forEach(r => {
-        const core = coreOf(r);
-        if (core) core.fabricExtend = feFor(r, [{ id: 1, destIp: tip(hub), name: `FE-to-${code(hub)}` }]);
-      });
-    }
+    // Fabric Extend: hub-and-spoke FE-IP tunnels between site L3 cores
+    // (row 1 = hub). The Configure step re-opens this pre-filled.
+    const finalSwitches = usesFabricExtend(architecture)
+      ? applyFabricExtend(switches, feCfgFromSites(sites), feSiteList(sites))
+      : switches;
 
     onComplete({
       file: { name: `Wizard: ${districtName.trim()}` },
       vlanCount,
-      switches,
+      switches: finalSwitches,
       serialMap: {},
       settings: {
         districtName: districtName.trim(),
@@ -476,7 +443,8 @@ function Wizard({ onComplete, onCancel }) {
           {usesFabricExtend(architecture) && (
             <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '10px', padding: '8px 10px', borderLeft: '3px solid var(--extreme-violet)', background: 'var(--canvas-bg)', borderRadius: '6px' }}>
               🌐 <strong>Fabric Extend:</strong> row 1 is the <strong>hub</strong>{vertical === 'K-12' ? ' (Central Office)' : ''}. Each {architecture === 'hybrid' ? 'Fabric Extend ' : ''}{noun.toLowerCase()} gets an FE-IP tunnel across the ISP to the hub, and the whole district runs as <strong>one fabric</strong>. When dark fiber arrives later, you just replace a tunnel with a fiber NNI — no I-SID or VLAN changes.
-              {' '}Enter each site's ISP hand-off: the port on its L3 core, the IP the ISP gave it, and the ISP's gateway.
+              {' '}Enter each site's ISP hand-off: the port on its L3 core, the IP the ISP gave it, and the ISP's gateway. {FE_PLATFORM_NOTE}
+              <div style={{ marginTop: '6px', color: 'var(--warning-text, #b45309)', fontWeight: 600 }}>⚠️ MTU: {FE_MTU_NOTE}</div>
             </div>
           )}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
