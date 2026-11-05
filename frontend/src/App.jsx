@@ -10,6 +10,7 @@ import Simulation from './pages/Simulation';
 import tokenService from './services/tokenService.js';
 import Join from './pages/Join';
 import { AdminPanel, ChangePasswordPanel } from './components/AccountsPanel.jsx';
+import { ToolsPanel } from './components/ToolsPanel.jsx';
 import apiService from './services/apiService.js';
 import './styles/ExtremeTheme.css';
 import './styles/App.css';
@@ -179,7 +180,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.11.1 (V2611052)',
+      appVersion: 'v2.12 (V2611053)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -364,6 +365,8 @@ function App() {
               )}
             </div>
 
+            <button onClick={() => setAccountsPanel('tools')} title="Command builder - SNMP and other one-off commands" style={headerCircle}>🧰</button>
+
             {user.role === 'admin' && (
               <button onClick={() => setAccountsPanel('admin')} title="Customer access - invites, users, activity" style={headerCircle}>👥</button>
             )}
@@ -387,6 +390,7 @@ function App() {
 
       {accountsPanel === 'admin' && <AdminPanel onClose={() => setAccountsPanel(null)} />}
       {accountsPanel === 'password' && <ChangePasswordPanel onClose={() => setAccountsPanel(null)} />}
+      {accountsPanel === 'tools' && <ToolsPanel onClose={() => setAccountsPanel(null)} />}
 
       {/* Main Content */}
       <div className="app-main">
@@ -496,7 +500,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.11.1 (V2611052)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.12 (V2611053)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>
