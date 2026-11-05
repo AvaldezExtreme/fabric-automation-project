@@ -32,6 +32,7 @@ const td = { padding: '6px 8px', fontSize: '0.85rem', borderBottom: '1px solid v
 export function AdminPanel({ onClose }) {
   const [tab, setTab] = useState('invites');
   const [enabled, setEnabled] = useState(null);
+  const [reason, setReason] = useState(null);
   const [users, setUsers] = useState([]);
   const [invites, setInvites] = useState([]);
   const [activity, setActivity] = useState([]);
@@ -46,6 +47,7 @@ export function AdminPanel({ onClose }) {
     try {
       const s = await api('/api/admin/status');
       setEnabled(s.accountsEnabled);
+      setReason(s.reason || null);
       if (!s.accountsEnabled) return;
       const [u, i, a] = await Promise.all([api('/api/admin/users'), api('/api/admin/invites'), api('/api/admin/activity')]);
       setUsers(u.users); setInvites(i.invites); setActivity(a.activity);
@@ -83,6 +85,8 @@ export function AdminPanel({ onClose }) {
           <div style={{ padding: '12px', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.9rem' }}>
             Customer accounts are off: no database is connected. Add a PostgreSQL database to the Railway project and
             set this service's <code>DATABASE_URL</code> variable to it, then redeploy. Your admin login works either way.
+            {reason && <div style={{ marginTop: '8px', fontFamily: 'monospace', fontSize: '0.8rem' }}>Reason: {reason}</div>}
+            <div style={{ marginTop: '8px' }}><button style={ghost} onClick={load}>Check again</button></div>
           </div>
         )}
 

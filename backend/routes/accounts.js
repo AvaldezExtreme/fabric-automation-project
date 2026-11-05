@@ -8,7 +8,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import authService from '../services/authService.js';
-import { query, dbReady, logActivity } from '../services/db.js';
+import { query, dbReady, dbStatus, logActivity } from '../services/db.js';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware.js';
 
 const sha256 = (s) => crypto.createHash('sha256').update(s).digest('hex');
@@ -99,7 +99,8 @@ export const adminRouter = express.Router();
 adminRouter.use(authMiddleware, requireRole('admin'));
 
 adminRouter.get('/status', async (req, res) => {
-  res.json({ success: true, accountsEnabled: await dbReady() });
+  const s = await dbStatus();
+  res.json({ success: true, accountsEnabled: s.ready, reason: s.error });
 });
 
 adminRouter.post('/invites', async (req, res) => {
