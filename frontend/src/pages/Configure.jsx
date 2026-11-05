@@ -477,6 +477,27 @@ function Configure({ data, onNext, onError }) {
       </div>
 
       <div style={{ marginBottom: '2rem' }}>
+        <h3>🪧 Login banner (MOTD)</h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
+          Shown when someone logs in to any switch. Use <code>{'{site}'}</code>, <code>{'{switch}'}</code> or <code>{'{siteId}'}</code> to fill in each switch's details.
+          Leave blank to show just the site name.
+        </p>
+        <input
+          style={{ width: '100%', maxWidth: '720px', padding: '8px 10px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '0.9rem', boxSizing: 'border-box' }}
+          maxLength={400}
+          placeholder="e.g. {site} - {switch} - Authorized access only. Activity is monitored."
+          value={settings.motdText || ''}
+          onChange={e => setSettings({ ...settings, motdText: e.target.value.replace(/"/g, '') })}
+        />
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          Preview for {data.switches[0]?.name || 'a switch'}:{' '}
+          <em>{(settings.motdText || '').trim()
+            ? settings.motdText.replaceAll('{site}', data.switches[0]?.location || 'SITE').replaceAll('{switch}', data.switches[0]?.name || 'SWITCH').replaceAll('{siteId}', String(data.switches[0]?.siteId ?? ''))
+            : (data.switches[0]?.location || 'site name')}</em>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: '2rem' }}>
         <h3>🌐 Fabric Extend (sites connected across an ISP)</h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
           No dark fiber between some sites? Fabric Extend tunnels each site to a hub across the ISP so the whole district runs as <strong>one fabric</strong>.

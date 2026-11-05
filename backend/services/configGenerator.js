@@ -10,6 +10,23 @@ web-server secure-only
 
 `;
 
+// Login banner (MOTD) - FE 9.4 CmdRef p.379: banner custom / banner
+// displaymotd / banner motd WORD<1-1516>. Text comes from the Configure step
+// (settings.motdText, tokens {site} {switch} {siteId}); without it the banner
+// is the site name, which is what L2 configs have always carried.
+const bannerBlock = (switchData, settings) => {
+  const location = switchData.location || 'Unknown Location';
+  const template = (settings.motdText || '').trim();
+  const text = template
+    ? template.replaceAll('{site}', location).replaceAll('{switch}', switchData.name || '').replaceAll('{siteId}', String(switchData.siteId ?? ''))
+    : location;
+  const clean = text.replace(/["\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 1516) || location;
+  return `banner custom
+banner displaymotd
+banner motd "${clean}"
+`;
+};
+
 export const generateL3Config = (switchData, settings = {}) => {
   const siteId = switchData.siteId;
   const switchName = switchData.name;
@@ -35,7 +52,7 @@ enable
 configure terminal
 
 prompt ${switchName}
-
+${bannerBlock(switchData, settings)}
 `;
   config += MGMT_ACCESS;
 
@@ -166,8 +183,8 @@ exit
 
   // Fabric Extend (FE-IP over an ISP) - FE 9.4 UG p.1316-1319, CmdRef
   // p.135/572/765. Joins this site's core into ONE SPB fabric with the other
-  // sites; migrating to dark fiber later = remove the logical-intf below and
-  // enable IS-IS on the fiber NNI. Tunnel source is the ISP brouter port IP on
+  // sites; migrating to dark fiber later = Auto-sense forms the fiber NNI by
+  // itself (UG p.72), then remove the logical-intf. Tunnel source is the ISP brouter port IP on
   // the GRT, kept separate from any IP-Shortcuts ip-source-address (UG p.1316).
   // Host routes (not a default) steer only tunnel endpoints to the ISP.
   const fe = switchData.fabricExtend;
@@ -180,6 +197,8 @@ exit
 ! tunnel adds overhead on top of customer frames (system MTU default 1950).
 ! Have the ISP raise the path MTU to fit; the logical-intf IS-IS MTU
 ! (default 1600, range 750-1600) only covers IS-IS packets (UG p.1312).
+! Dark fiber later: Auto-sense brings the fiber up as a fabric link on its
+! own; then retire the tunnel: ${fe.tunnels.map(t => `no logical-intf isis ${t.id}`).join(' / ')} (CmdRef p.573)
 ! ============================================
 ! ISP hand-off (tunnel underlay)
 interface gigabitEthernet ${fe.wanPort}
@@ -281,10 +300,7 @@ enable
 configure terminal
 
 prompt ${switchName}
-banner custom
-banner displaymotd
-banner motd "${location}"
-
+${bannerBlock(switchData, settings)}
 `;
   config += MGMT_ACCESS;
 

@@ -180,7 +180,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.12 (V2611053)',
+      appVersion: 'v2.13 (V2611054)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -390,7 +390,7 @@ function App() {
 
       {accountsPanel === 'admin' && <AdminPanel onClose={() => setAccountsPanel(null)} />}
       {accountsPanel === 'password' && <ChangePasswordPanel onClose={() => setAccountsPanel(null)} />}
-      {accountsPanel === 'tools' && <ToolsPanel onClose={() => setAccountsPanel(null)} />}
+      {accountsPanel === 'tools' && <ToolsPanel data={data} onClose={() => setAccountsPanel(null)} />}
 
       {/* Main Content */}
       <div className="app-main">
@@ -500,7 +500,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.12 (V2611053)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.13 (V2611054)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>
