@@ -30,7 +30,9 @@ banner motd "${clean}"
 // Uplink out of the fabric (switchData.uplink, attached by the Configure
 // step): the ISP hand-off on a siloed site, or the firewall link on the core
 // site. Local VLAN, no I-SID. Auto-sense must be off before the port takes a
-// static VLAN (UG p.23); port syntax CmdRef p.133/345/739.
+// static VLAN (UG p.23); port syntax CmdRef p.133/345/739. No VLAN 1
+// removal needed - the switch moves the port out on its own (Claudio,
+// tested on hardware).
 const uplinkBlock = (u) => {
   const [ip, len] = u.ip.split('/');
   const towards = u.role === 'isp' ? 'the ISP / WAN (siloed site)' : 'the firewall (core site)';
@@ -47,7 +49,6 @@ exit
 interface gigabitEthernet ${u.port}
 no auto-sense enable
 exit
-vlan members remove 1 ${u.port}
 vlan members add ${u.vlanId} ${u.port}
 interface gigabitEthernet ${u.port}
 encapsulation dot1q
