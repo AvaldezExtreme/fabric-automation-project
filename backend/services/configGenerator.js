@@ -27,6 +27,70 @@ banner motd "${clean}"
 `;
 };
 
+// Uplink out of the fabric (switchData.uplink, attached by the Configure
+// step): the ISP hand-off on a siloed site, or the firewall link on the core
+// site. Local VLAN, no I-SID. Auto-sense must be off before the port takes a
+// static VLAN (UG p.23); port syntax CmdRef p.133/345/739.
+const uplinkBlock = (u) => {
+  const [ip, len] = u.ip.split('/');
+  const towards = u.role === 'isp' ? 'the ISP / WAN (siloed site)' : 'the firewall (core site)';
+  return `
+! ============================================
+! Uplink to ${towards}
+! PLEASE VERIFY THE ACTUAL IP ADDRESS AND PORT BEFORE LOADING
+! ============================================
+vlan create ${u.vlanId} name ${u.name} type port-mstprstp 0
+interface vlan ${u.vlanId}
+ip address ${ip} ${cidrToNetmask(len)}
+exit
+
+interface gigabitEthernet ${u.port}
+no auto-sense enable
+exit
+vlan members remove 1 ${u.port}
+vlan members add ${u.vlanId} ${u.port}
+interface gigabitEthernet ${u.port}
+encapsulation dot1q
+default-vlan-id ${u.vlanId}
+untag-port-default-vlan enable
+no shutdown
+exit
+`;
+};
+
+// Onboarding gateway (switchData.onboarding): rebuilds onboarding private
+// VLAN 4048/4049 on I-SID 15999999 with an IP so new switches get DHCP and
+// find Site Engine (FE 9.4 UG p.23, p.101-102; CmdRef p.375, p.580, p.733,
+// p.736, p.1944). One per fabric - the Configure step decides which cores.
+const onboardingBlock = (o, settings) => {
+  const [ip, len] = o.ip.split('/');
+  const mask = cidrToNetmask(len);
+  const network = ip.split('.').map((oct, i) => parseInt(oct) & parseInt(mask.split('.')[i])).join('.');
+  return `
+! ============================================
+! Onboarding gateway (VLAN 4048 / I-SID 15999999)
+! New switches get DHCP here, reach Site Engine, and Site Engine pushes
+! their final IP configuration. One onboarding gateway per fabric.
+! DHCP server: add a scope for ${network}/${len}
+! ============================================
+no mgmt dhcp-client
+no auto-sense onboarding i-sid
+no vlan 4048
+vlan create 4048 name onboarding-vlan type pvlan-mstprstp 0 secondary 4049
+vlan i-sid 4048 15999999
+interface vlan 4048
+ip address ${ip} ${mask}
+ip dhcp-relay
+enable
+ip dhcp-relay fwd-path ${settings.dhcpServer1 || '10.1.1.202'} enable
+ip dhcp-relay fwd-path ${settings.dhcpServer2 || '10.1.1.207'} enable
+mgmt enable
+exit
+
+auto-sense onboarding i-sid 15999999
+`;
+};
+
 export const generateL3Config = (switchData, settings = {}) => {
   const siteId = switchData.siteId;
   const switchName = switchData.name;
@@ -224,6 +288,9 @@ exit`).join('\n')}
 `;
   }
 
+  if (switchData.uplink) config += uplinkBlock(switchData.uplink);
+  if (switchData.onboarding) config += onboardingBlock(switchData.onboarding, settings);
+
   // Management clip
   config += `
 ! Management CLIP
@@ -239,6 +306,11 @@ exit
   if (gatewayEnabled === 'yes') {
     config += `! Default Route
 ip route 0.0.0.0 0.0.0.0 ${defaultGateway} weight 1
+
+`;
+  } else if (switchData.uplink) {
+    config += `! Default Route - via the ${switchData.uplink.role === 'isp' ? 'ISP' : 'firewall'} uplink
+ip route 0.0.0.0 0.0.0.0 ${switchData.uplink.nextHop} weight 1
 
 `;
   } else {
@@ -261,16 +333,6 @@ ip route 0.0.0.0 0.0.0.0 ${defaultGateway} weight 1
         config += cmd.command + '\n';
       });
     }
-  }
-  
-  // WAN configuration if provided
-  if (settings.wanLinkIp) {
-    config += `
-! WAN Link Configuration
-interface vlan 1000
-ip address ${settings.wanLinkIp} ${settings.wanLinkNetmask || '255.255.255.0'}
-exit
-`;
   }
   
   config += `

@@ -53,6 +53,9 @@ export const stripTemplateExampleRows = (excelSheets) => {
   return stripped;
 };
 
+// Trimmed string value of a column ('' when absent)
+const cell = (row, key) => (row[key] ?? '').toString().trim();
+
 // Scan raw rows and report precise, human-readable data problems.
 // Row numbers are Excel row numbers (header is row 1, data starts at row 2).
 export const collectRowIssues = (excelSheets) => {
@@ -112,6 +115,24 @@ export const collectRowIssues = (excelSheets) => {
         }
         if (gateway && !ipPattern.test(gateway)) {
           issues.push(`${where}: DefaultGateway "${gateway}" is not a valid IP address`);
+        }
+        const upVlan = cell(row, 'Uplink VLAN');
+        if (upVlan) {
+          const upIp = cell(row, 'Uplink IP');
+          const upGw = cell(row, 'Uplink Gateway');
+          if (switchType && switchType !== 'L3') {
+            issues.push(`${where}: Uplink columns are only used on the L3 core's row - ignored on "${switchName}"`);
+          } else {
+            if (isNaN(parseInt(upVlan)) || parseInt(upVlan) < 2 || parseInt(upVlan) > 4059) {
+              issues.push(`${where}: Uplink VLAN "${upVlan}" is not valid (must be 2-4059)`);
+            }
+            if (upIp && !cidrPattern.test(upIp)) {
+              issues.push(`${where}: Uplink IP "${upIp}" is not CIDR format (e.g. 10.254.253.42/24)`);
+            }
+            if (upGw && !ipPattern.test(upGw)) {
+              issues.push(`${where}: Uplink Gateway "${upGw}" is not a valid IP address`);
+            }
+          }
         }
       }
     });
@@ -284,7 +305,21 @@ allRows.forEach(({ row }) => {
   const portsField = sanitizeInput(row['Ports']?.toString() || '');
   const loopbackMatch = portsField.match(/loopback\s+((?:\d{1,3}\.){3}\d{1,3})/i);
   const loopback = loopbackMatch ? loopbackMatch[1] : null;
-  
+
+  // Optional uplink out of the fabric (columns U-Y, on the L3 core's row):
+  // the ISP hand-off on a siloed site or the firewall link on the core site.
+  // The Configure step decides which sites actually get it.
+  const uplinkVlan = parseInt(cell(row, 'Uplink VLAN'));
+  const uplink = switchType === 'L3' && uplinkVlan
+    ? {
+        vlanId: uplinkVlan,
+        name: sanitizeInput(cell(row, 'Uplink Name')),
+        ip: sanitizeInput(cell(row, 'Uplink IP')),
+        port: sanitizeInput(cell(row, 'Uplink Port')),
+        nextHop: sanitizeInput(cell(row, 'Uplink Gateway'))
+      }
+    : null;
+
   const switchKey = `${switchName}|${siteId}|${switchType}`;
   
   if (!switches.has(switchKey)) {
@@ -311,7 +346,8 @@ allRows.forEach(({ row }) => {
       vlans: [],
       isidPrefix: extractIsidPrefix(serviceApp),
       autoSenseCommands: [],
-      l2DefaultGateway: l2DefaultGateway
+      l2DefaultGateway: l2DefaultGateway,
+      ...(uplink ? { uplink } : {})
     });
     
     console.log(`DEBUG SWITCH: Site ${siteId}, Octet .${currentOctet}, ${switchName} (${switchType})`);

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import SegmentedVrfPanel, { defaultSegVrf, validateSegVrf } from '../components/SegmentedVrfPanel.jsx';
 import BulkImportModal from '../components/BulkImportModal';
 import { FE_MTU_NOTE, FE_PLATFORM_NOTE, validateFabricExtend, applyFabricExtend, cfgFromSwitches, feEndpointIds } from '../utils/fabricExtend.js';
+import { INTERCONNECTS, interconnectFromArchitecture, serviceSiteIds, validateSiteServices, applySiteServices, siteServicesFromSwitches, ONBOARDING_VLAN, ONBOARDING_ISID } from '../utils/siteServices.js';
 
 function Configure({ data, onNext, onError }) {
   // Initialize from saved/previous data so revisiting this step (or resuming
@@ -14,8 +15,6 @@ function Configure({ data, onNext, onError }) {
   const [settings, setSettings] = useState({
     dhcpServer1: '10.1.1.202',
     dhcpServer2: '10.1.1.207',
-    wanLinkIp: '',
-    wanLinkNetmask: '',
     ...(data.settings || {})
   });
 
@@ -58,10 +57,35 @@ function Configure({ data, onNext, onError }) {
   const [feCfg, setFeCfg] = useState(() => {
     const existing = cfgFromSwitches(data.switches || []);
     if (existing) return existing;
-    const hub = feSites.find(s => /^CO$/i.test(s.label)) || feSites[0];
+    // feCfg.hubSiteId doubles as the CORE site for every interconnect mode
+    const saved = feSites.find(s => s.siteId === (data.settings || {}).coreSiteId);
+    const hub = saved || feSites.find(s => /^CO$/i.test(s.label)) || feSites[0];
     return { enabled: false, hubSiteId: hub ? hub.siteId : null, sites: {} };
   });
   const setFeSite = (siteId, patch) => setFeCfg(prev => ({ ...prev, sites: { ...prev.sites, [siteId]: { ...(prev.sites[siteId] || {}), ...patch } } }));
+
+  // How the sites are connected decides which cores get the onboarding
+  // gateway and an uplink (see utils/siteServices.js). Unknown projects start
+  // as "one fabric": the safe default - a missing gateway only delays
+  // onboarding, while extra gateways on the shared onboarding I-SID break it.
+  const [interconnect, setInterconnect] = useState(() =>
+    (data.settings || {}).siteInterconnect
+    || (cfgFromSwitches(data.switches || []) ? 'extend' : null)
+    || interconnectFromArchitecture((data.settings || {}).fabricArchitecture)
+    || 'single');
+  const chooseInterconnect = (mode) => {
+    setInterconnect(mode);
+    setFeCfg(prev => ({ ...prev, enabled: mode === 'extend' }));
+  };
+  const [svc, setSvc] = useState(() => siteServicesFromSwitches(data.switches || [], data.settings || {}));
+  const setSvcSite = (siteId, patch) => setSvc(prev => ({ ...prev, sites: { ...prev.sites, [siteId]: { ...(prev.sites[siteId] || {}), ...patch } } }));
+  const setUplink = (siteId, patch) => setSvc(prev => {
+    const cur = prev.sites[siteId] || {};
+    return { ...prev, sites: { ...prev.sites, [siteId]: { ...cur, uplink: { ...(cur.uplink || {}), ...patch } } } };
+  });
+  // Fabric Extend is on exactly when the interconnect says so (and 2+ sites)
+  const feEff = { ...feCfg, enabled: interconnect === 'extend' && feSites.length >= 2 };
+  const svcSiteIds = serviceSiteIds(interconnect, feCfg.hubSiteId, feSites.map(s => s.siteId));
 
   const handleSerialChange = (switchName, value) => {
     setSerialMap({
@@ -154,19 +178,29 @@ function Configure({ data, onNext, onError }) {
         return;
       }
 
-      const feErr = validateFabricExtend(feCfg, feSites, data.switches, vlanServices.map(v => v.vlanId));
+      const feErr = validateFabricExtend(feEff, feSites, data.switches, vlanServices.map(v => v.vlanId));
       if (feErr) {
         onError(feErr);
         return;
       }
 
+      const svcErr = validateSiteServices(svc, interconnect, feCfg.hubSiteId, feSites, data.switches, vlanServices.map(v => v.vlanId), feEff);
+      if (svcErr) {
+        onError(svcErr);
+        return;
+      }
+
       onNext({
         ...data,
-        // FE tunnels live on the site cores; rebuilt every time so turning
-        // FE off (or changing a site) never leaves a stale tunnel behind
-        switches: applyFabricExtend(data.switches, feCfg, feSites),
+        // FE tunnels, onboarding gateways and uplinks live on the site cores;
+        // rebuilt every time so changing the interconnect (or a site) never
+        // leaves a stale block behind
+        switches: applySiteServices(applyFabricExtend(data.switches, feEff, feSites), svc, interconnect, feCfg.hubSiteId),
         serialMap: structuredSerialMap,
-        settings: { ...settings, ssidVlanIds, segmentedVrf: segVrf.enabled ? segVrf : null },
+        settings: {
+          ...settings, ssidVlanIds, segmentedVrf: segVrf.enabled ? segVrf : null,
+          siteInterconnect: interconnect, coreSiteId: feCfg.hubSiteId, onboardingGateway: svc.onboarding
+        },
         skipSerials
       });
     }
@@ -398,27 +432,6 @@ function Configure({ data, onNext, onError }) {
           />
           <div className="help-text">Secondary DHCP relay address</div>
         </div>
-
-        <div className="form-group">
-          <label>WAN Link IP (Optional for L3)</label>
-          <input
-            type="text"
-            value={settings.wanLinkIp}
-            onChange={(e) => handleSettingChange('wanLinkIp', e.target.value)}
-            placeholder="10.101.1.11"
-          />
-          <div className="help-text">Leave blank to use defaults</div>
-        </div>
-
-        <div className="form-group">
-          <label>WAN Link Netmask (Optional for L3)</label>
-          <input
-            type="text"
-            value={settings.wanLinkNetmask}
-            onChange={(e) => handleSettingChange('wanLinkNetmask', e.target.value)}
-            placeholder="255.255.255.0"
-          />
-        </div>
       </div>
 
       {/* NAVIGATION */}
@@ -498,21 +511,37 @@ function Configure({ data, onNext, onError }) {
       </div>
 
       <div style={{ marginBottom: '2rem' }}>
-        <h3>🌐 Fabric Extend (sites connected across an ISP)</h3>
+        <h3>🌐 How are the sites connected?</h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
-          No dark fiber between some sites? Fabric Extend tunnels each site to a hub across the ISP so the whole district runs as <strong>one fabric</strong>.
-          When dark fiber arrives later, that site just swaps its tunnel for a fiber link — no I-SID, VLAN or subnet changes. {FE_PLATFORM_NOTE}
+          This decides which cores get Fabric Extend tunnels, the onboarding gateway and an uplink.
         </p>
         {feSites.length < 2 ? (
-          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>This project has a single site — Fabric Extend needs at least two.</div>
+          <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>This project has a single site — its core gets the onboarding gateway and the uplink.</div>
         ) : (
           <>
-            <label style={{ fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}>
-              <input type="checkbox" checked={!!feCfg.enabled} onChange={e => setFeCfg({ ...feCfg, enabled: e.target.checked })} />
-              {' '}Connect sites with Fabric Extend
-            </label>
-            {feCfg.enabled && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxWidth: '760px' }}>
+              {INTERCONNECTS.map(opt => (
+                <label key={opt.key} style={{ fontSize: '0.88rem', cursor: 'pointer' }}>
+                  <input type="radio" name="cfg-interconnect" checked={interconnect === opt.key} onChange={() => chooseInterconnect(opt.key)} />
+                  {' '}<strong>{opt.title}</strong> <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>— {opt.desc}</span>
+                </label>
+              ))}
+            </div>
+            {interconnect === 'single' && (
+              <div style={{ marginTop: '0.75rem', fontSize: '0.88rem' }}>
+                <strong>Core site:</strong>{' '}
+                <select value={feCfg.hubSiteId ?? ''} onChange={e => setFeCfg({ ...feCfg, hubSiteId: (feSites.find(x => String(x.siteId) === e.target.value) || {}).siteId })}
+                  style={{ padding: '4px 6px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--card-bg)', color: 'var(--text-primary)' }}>
+                  {feSites.map(site => <option key={site.siteId} value={site.siteId}>{site.label} · Site {site.siteId}</option>)}
+                </select>
+              </div>
+            )}
+            {interconnect === 'extend' && (
               <div style={{ marginTop: '0.75rem' }}>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', margin: '0 0 0.5rem' }}>
+                  Fabric Extend tunnels each site to the hub (the core site) across the ISP so the whole district runs as <strong>one fabric</strong>.
+                  When dark fiber arrives later, that site just swaps its tunnel for a fiber link — no I-SID, VLAN or subnet changes. {FE_PLATFORM_NOTE}
+                </p>
                 <div style={{ fontSize: '0.8rem', marginBottom: '8px', padding: '8px 10px', borderLeft: '3px solid #f59e0b', background: 'var(--canvas-bg)', borderRadius: '6px' }}>
                   ⚠️ <strong>MTU:</strong> {FE_MTU_NOTE}
                 </div>
@@ -565,6 +594,48 @@ function Configure({ data, onNext, onError }) {
             )}
           </>
         )}
+      </div>
+
+      <div style={{ marginBottom: '2rem' }}>
+        <h3>🚀 Onboarding gateway & uplinks</h3>
+        <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', maxWidth: '900px' }}>
+          The <strong>onboarding gateway</strong> puts an IP on onboarding VLAN {ONBOARDING_VLAN} (I-SID {ONBOARDING_ISID}) so new switches get DHCP, find Site Engine,
+          and Site Engine pushes their final IP config. There is one per fabric: {interconnect === 'siloed' ? 'siloed, so every site core gets one.' : 'one fabric, so only the core site gets it.'}
+          {' '}The <strong>uplink</strong> is the routed hand-off out of the fabric ({interconnect === 'siloed' ? 'the VLAN facing the ISP at each site' : 'the VLAN facing the firewall at the core site'}); its gateway becomes the default route. Leave the uplink blank if you don't need it.
+        </p>
+        <label style={{ fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}>
+          <input type="checkbox" checked={!!svc.onboarding} onChange={e => setSvc({ ...svc, onboarding: e.target.checked })} />
+          {' '}Configure the onboarding gateway
+        </label>
+        <table className="table" style={{ marginTop: '0.5rem' }}>
+          <thead>
+            <tr>
+              <th>Site</th>{svc.onboarding && <th>Onboarding gateway</th>}<th>Uplink VLAN</th><th>Name</th><th>IP/prefix</th><th>Port</th><th>Gateway</th>
+            </tr>
+          </thead>
+          <tbody>
+            {feSites.filter(site => svcSiteIds.includes(site.siteId)).map(site => {
+              const s = svc.sites[site.siteId] || {};
+              const u = s.uplink || {};
+              const inp = { padding: '4px 6px', border: '1px solid var(--border-color)', borderRadius: '6px', background: 'var(--card-bg)', color: 'var(--text-primary)', fontSize: '0.85rem' };
+              return (
+                <tr key={site.siteId}>
+                  <td><strong>{site.label}</strong> <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>· Site {site.siteId}{site.location ? ` · ${site.location}` : ''}</span></td>
+                  {svc.onboarding && <td><input style={{ ...inp, width: '130px' }} placeholder={`10.48.${site.siteId}.1/24`} value={s.onboardingIp || ''} onChange={e => setSvcSite(site.siteId, { onboardingIp: e.target.value })} /></td>}
+                  <td><input style={{ ...inp, width: '60px' }} placeholder="5" value={u.vlanId ?? ''} onChange={e => setUplink(site.siteId, { vlanId: e.target.value })} /></td>
+                  <td><input style={{ ...inp, width: '110px' }} placeholder={interconnect === 'siloed' ? 'ISP-WAN' : 'FW-Uplink'} value={u.name || ''} onChange={e => setUplink(site.siteId, { name: e.target.value })} /></td>
+                  <td><input style={{ ...inp, width: '140px' }} placeholder="10.254.253.42/24" value={u.ip || ''} onChange={e => setUplink(site.siteId, { ip: e.target.value })} /></td>
+                  <td><input style={{ ...inp, width: '60px' }} placeholder="2/1" value={u.port || ''} onChange={e => setUplink(site.siteId, { port: e.target.value })} /></td>
+                  <td><input style={{ ...inp, width: '120px' }} placeholder="10.254.253.1" value={u.nextHop || ''} onChange={e => setUplink(site.siteId, { nextHop: e.target.value })} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '4px', maxWidth: '900px' }}>
+          Add a DHCP scope for each onboarding subnet on your DHCP server. {interconnect === 'extend' ? 'Fabric Extend remote sites get no uplink: their ISP port is the tunnel, and everything else rides the fabric to the core. ' : ''}
+          The Uplink columns (U-Y) in the Excel template pre-fill this table.
+        </div>
       </div>
 
       <div style={{ marginBottom: '2rem' }}>
