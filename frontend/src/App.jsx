@@ -183,7 +183,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.14.2 (V2611057)',
+      appVersion: 'v2.15 (V2611131)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -233,6 +233,20 @@ function App() {
     };
     reader.readAsText(file);
   };
+
+  // A file dropped outside a drop zone would make the browser download or
+  // open it (and leave FACE) - swallow those; FileDropZone handles real drops
+  useEffect(() => {
+    const block = (e) => {
+      if (e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files')) e.preventDefault();
+    };
+    window.addEventListener('dragover', block);
+    window.addEventListener('drop', block);
+    return () => {
+      window.removeEventListener('dragover', block);
+      window.removeEventListener('drop', block);
+    };
+  }, []);
 
   // Warn before losing unsaved work on refresh/close
   useEffect(() => {
@@ -319,7 +333,7 @@ function App() {
       {/* Header - Extreme Platform ONE style: flat charcoal bar, wordmark,
           context chip, round controls. Blends with the corporate portal. */}
       <header className="app-header" style={headerBarStyle}>
-        <div className="header-content" style={{ height: '68px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div className="header-content" style={{ minHeight: '68px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', minWidth: 0 }}>
             {/* Logo square */}
             <div style={{
@@ -526,7 +540,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.14.2 (V2611057)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.15 (V2611131)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>

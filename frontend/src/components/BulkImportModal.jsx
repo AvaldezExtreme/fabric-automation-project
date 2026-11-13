@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
+import FileDropZone from './FileDropZone.jsx';
 
 function BulkImportModal({ switches, onImport, onClose }) {
   const [file, setFile] = useState(null);
@@ -9,26 +10,26 @@ function BulkImportModal({ switches, onImport, onClose }) {
   const [step, setStep] = useState('upload'); // upload, preview, confirm
   const [error, setError] = useState(null);
 
-  const handleFileSelect = (e) => {
-    const selectedFile = e.target.files[0];
+  // From the drop zone (drag & drop or Browse)
+  const handleFileSelect = (selectedFile) => {
     if (!selectedFile) return;
 
     setFile(selectedFile);
     setError(null);
 
     // Parse file
-    if (selectedFile.name.endsWith('.csv')) {
+    if (/\.csv$/i.test(selectedFile.name)) {
       Papa.parse(selectedFile, {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
-          processFileData(results.data);
+          processFileData(results.data, selectedFile);
         },
         error: (err) => {
           setError(`CSV parsing error: ${err.message}`);
         }
       });
-    } else if (selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls')) {
+    } else if (/\.(xlsx|xls)$/i.test(selectedFile.name)) {
       const reader = new FileReader();
       reader.onload = (event) => {
         try {
@@ -36,7 +37,7 @@ function BulkImportModal({ switches, onImport, onClose }) {
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
           const data = XLSX.utils.sheet_to_json(worksheet);
-          processFileData(data);
+          processFileData(data, selectedFile);
         } catch (err) {
           setError(`Excel parsing error: ${err.message}`);
         }
@@ -47,7 +48,7 @@ function BulkImportModal({ switches, onImport, onClose }) {
     }
   };
 
-  const processFileData = (data) => {
+  const processFileData = (data, sourceFile) => {
     if (!data || data.length === 0) {
       setError('File is empty');
       return;
@@ -91,8 +92,8 @@ function BulkImportModal({ switches, onImport, onClose }) {
     const unmappedSwitches = new Set(switches.map(s => s.name));
 
     data.forEach((row, idx) => {
-      const switchName = row[switchNameCol]?.trim();
-      const serial = row[serialCol]?.trim();
+      const switchName = String(row[switchNameCol] ?? '').trim();
+      const serial = String(row[serialCol] ?? '').trim();
 
       if (switchName && serial) {
         // Try to find matching switch
@@ -115,7 +116,7 @@ function BulkImportModal({ switches, onImport, onClose }) {
 
     setMapping(newMapping);
     setParsedData({
-      fileName: file.name,
+      fileName: sourceFile.name,
       matched: Object.keys(newMapping).length,
       total: switches.length,
       unmapped: Array.from(unmappedSwitches),
@@ -176,34 +177,10 @@ function BulkImportModal({ switches, onImport, onClose }) {
               Upload a CSV or Excel file with switch names and serial numbers
             </p>
 
-            <div style={{
-              border: '2px dashed #9ca3af',
-              borderRadius: '8px',
-              padding: '2rem',
-              textAlign: 'center',
-              marginBottom: '1.5rem',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}>
-              <input
-                type="file"
-                accept=".csv,.xlsx,.xls"
-                onChange={handleFileSelect}
-                style={{
-                  display: 'none',
-                  cursor: 'pointer'
-                }}
-                id="bulk-upload"
-              />
-              <label htmlFor="bulk-upload" style={{ cursor: 'pointer', display: 'block' }}>
-                <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📁</div>
-                <div style={{ fontWeight: '600', marginBottom: '0.25rem' }}>
-                  {file ? file.name : 'Click to upload or drag and drop'}
-                </div>
-                <div style={{ fontSize: '0.85rem', color: '#9ca3af' }}>
-                  CSV or Excel file with "Switch Name" and "Serial Number" columns
-                </div>
-              </label>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <FileDropZone compact accept=".csv,.xlsx,.xls" file={file} onFile={handleFileSelect}
+                title="📤 Upload your serial number file"
+                hint='CSV or Excel with "Switch Name" and "Serial Number" columns' />
             </div>
 
             {error && (

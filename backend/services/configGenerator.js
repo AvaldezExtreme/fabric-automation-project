@@ -385,7 +385,8 @@ ${bannerBlock(switchData, settings)}
   const mgmtVlan = vlansToConfig.find(v => v.vlanId === mgmtVlanId);
   
   let mgmtIp = '10.0.0.1';
-  let mgmtGateway = l2DefaultGateway;
+  let mgmtGateway = null;
+  let mgmtPrefix = '24';
   
   if (mgmtVlan && mgmtVlan.subnet) {
     const [network, cidr] = mgmtVlan.subnet.split('/');
@@ -394,7 +395,10 @@ ${bannerBlock(switchData, settings)}
       const lastOctet = switchData.mgmtIpOctet ? parseInt(switchData.mgmtIpOctet) : 1;
       console.log(`DEBUG L2 ${switchData.name}: MgmtVLAN=${mgmtVlanId}, mgmtIpOctet="${switchData.mgmtIpOctet}", final IP="${octets[0]}.${octets[1]}.${octets[2]}.${lastOctet}"`);
       mgmtIp = `${octets[0]}.${octets[1]}.${octets[2]}.${lastOctet}`;
-      mgmtGateway = l2DefaultGateway;
+      // Next hop = the mgmt VLAN's gateway on the L3 core, built the same
+      // way the L3 SVI is (first three octets + .1)
+      mgmtGateway = `${octets[0]}.${octets[1]}.${octets[2]}.1`;
+      mgmtPrefix = cidr;
     }
   } else {
     // If no subnet found, use default
@@ -447,15 +451,19 @@ exit
     });
   }
 
- // Calculate dynamic L2 gateway: 10.{SiteID}.{MgmtVLAN}.1
-  const dynamicL2Gateway = `10.${siteId}.${mgmtVlanId}.1`;
+ // Next hop: the mgmt subnet's gateway. Only without a mgmt subnet fall
+  // back to the legacy 10.{SiteID}.{MgmtVLAN}.1 scheme - which only forms an
+  // address when the VLAN ID fits in an octet (VLAN 1024 -> 10.24.1024.1
+  // was the bug), else the sheet's DefaultGateway.
+  const dynamicL2Gateway = mgmtGateway
+    || (mgmtVlanId <= 255 ? `10.${siteId}.${mgmtVlanId}.1` : l2DefaultGateway);
   
   // Management configuration (using dynamic gateway based on site and mgmt vlan)
   config += `
 ! Management Configuration
 no mgmt vlan
 mgmt vlan ${mgmtVlanId}
-ip add ${mgmtIp}/24
+ip add ${mgmtIp}/${mgmtPrefix}
 ip route 0.0.0.0 0.0.0.0 next-hop ${dynamicL2Gateway} weight 1
 enable
 exit

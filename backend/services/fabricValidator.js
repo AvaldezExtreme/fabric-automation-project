@@ -185,6 +185,101 @@ const runIPSubnetChecks = (switches, logicalVlans, results) => {
       severity: 'info'
     });
   }
+
+  runSubnetOverlapChecks(switches, withSubnet, results);
+};
+
+// Every routed subnet FACE will configure: VLAN subnets plus the onboarding
+// gateway, uplinks and Fabric Extend ISP links attached on the Configure step
+const collectRanges = (switches, withSubnet) => {
+  const out = [];
+  const seen = new Set();
+  const add = (cidr, label, kind) => {
+    if (!isValidCIDR(cidr)) return;
+    const key = `${networkKey(cidr)}|${label}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const [start, end] = cidrRange(cidr);
+    out.push({ cidr, label, kind, start, end });
+  };
+  withSubnet.forEach(v => add(v.subnet, vlanLabel(v), 'vlan'));
+  switches.forEach(sw => {
+    if (sw.onboarding && sw.onboarding.ip) add(sw.onboarding.ip, `Site ${sw.siteId} onboarding gateway (VLAN 4048)`, 'extra');
+    if (sw.uplink && sw.uplink.ip) add(sw.uplink.ip, `Site ${sw.siteId} uplink (VLAN ${sw.uplink.vlanId})`, 'extra');
+    if (sw.fabricExtend && sw.fabricExtend.wanIp) add(sw.fabricExtend.wanIp, `Site ${sw.siteId} Fabric Extend ISP link`, 'extra');
+  });
+  return out;
+};
+
+const runSubnetOverlapChecks = (switches, withSubnet, results) => {
+  const ranges = collectRanges(switches, withSubnet);
+
+  // Overlap = address ranges intersect. Two VLANs on the very same network
+  // are already reported as Subnet Conflicts above, so skip only that case.
+  const overlaps = [];
+  const sorted = [...ranges].sort((a, b) => a.start - b.start || b.end - a.end);
+  for (let i = 0; i < sorted.length; i++) {
+    for (let j = i + 1; j < sorted.length && sorted[j].start <= sorted[i].end; j++) {
+      const a = sorted[i], b = sorted[j];
+      if (a.start === b.start && a.end === b.end && a.kind === 'vlan' && b.kind === 'vlan') continue;
+      overlaps.push({ a: `${a.cidr} (${a.label})`, b: `${b.cidr} (${b.label})` });
+    }
+  }
+  if (overlaps.length > 0) {
+    results.checks.push({
+      type: 'error',
+      category: 'L3 Configuration',
+      check: 'Subnet Overlaps',
+      message: `Found ${overlaps.length} overlapping subnet pair(s) - one range sits inside another, so routing for the shared addresses breaks: ${overlaps.map(o => `${o.a} overlaps ${o.b}`).join('; ').substring(0, 400)}`,
+      details: overlaps,
+      severity: 'critical'
+    });
+  } else {
+    results.checks.push({
+      type: 'pass',
+      category: 'L3 Configuration',
+      check: 'Subnet Overlaps',
+      message: `No overlapping address ranges across ${ranges.length} subnet(s), including onboarding, uplink and Fabric Extend links`,
+      severity: 'info'
+    });
+  }
+
+  // The typed address sits in a different /24 than its network (e.g.
+  // 10.124.33.0/19 - the network is 10.124.32.0/19). FACE builds the gateway
+  // from the typed first three octets (.33.1): a valid host, but rarely what
+  // the plan meant. Gateway-style entries like 10.10.2.1/24 are fine.
+  const notNetwork = [];
+  const seen = new Set();
+  withSubnet.forEach(v => {
+    if (seen.has(v.subnet) || !isValidCIDR(v.subnet)) return;
+    seen.add(v.subnet);
+    const [start] = cidrRange(v.subnet);
+    const typedIp = v.subnet.split('/')[0];
+    const o = typedIp.split('.');
+    const gateway = `${o[0]}.${o[1]}.${o[2]}.1`;
+    // typed as the gateway itself (10.12.1.1/16) is fine - that IS what FACE uses
+    if ((ipToInt(typedIp) >>> 8) !== (start >>> 8) && gateway !== typedIp) {
+      notNetwork.push({ subnet: v.subnet, network: `${intToIp(start)}/${v.subnet.split('/')[1]}`, gateway, usedBy: vlanLabel(v) });
+    }
+  });
+  if (notNetwork.length > 0) {
+    results.checks.push({
+      type: 'warning',
+      category: 'L3 Configuration',
+      check: 'Subnet Network Address',
+      message: `${notNetwork.length} subnet(s) don't start on their network - check the intended gateway: ${notNetwork.map(n => `${n.subnet} (${n.usedBy}) is network ${n.network}; FACE will use gateway ${n.gateway}`).join('; ').substring(0, 400)}`,
+      details: notNetwork,
+      severity: 'warning'
+    });
+  } else {
+    results.checks.push({
+      type: 'pass',
+      category: 'L3 Configuration',
+      check: 'Subnet Network Address',
+      message: "Every subnet's gateway lands on its network (first three octets + .1)",
+      severity: 'info'
+    });
+  }
 };
 
 // ============================================
@@ -535,6 +630,18 @@ const networkKey = (subnet) => {
   const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
   const net = (ipInt & mask) >>> 0;
   return `${net}/${prefix}`;
+};
+
+const ipToInt = (ip) => ip.split('.').map(Number).reduce((n, o) => ((n << 8) + o) >>> 0, 0);
+const intToIp = (n) => [24, 16, 8, 0].map(s => (n >>> s) & 255).join('.');
+
+// [first, last] address of a CIDR as unsigned ints
+const cidrRange = (subnet) => {
+  const [ip, prefixStr] = subnet.split('/');
+  const prefix = parseInt(prefixStr);
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+  const start = (ipToInt(ip) & mask) >>> 0;
+  return [start, (start | (~mask >>> 0)) >>> 0];
 };
 
 export default {

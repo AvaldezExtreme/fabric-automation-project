@@ -736,9 +736,10 @@ input:focus, textarea:focus, select:focus {
 
 /* ============ RESPONSIVE ============ */
 @media (max-width: 1200px) {
+  /* The header is one 68px row (App.jsx); stacking it into a column here
+     pushed the buttons out over the page. Wrap only if it truly runs out. */
   .header-content {
-    flex-direction: column;
-    text-align: center;
+    flex-wrap: wrap;
   }
 
   .header-user {
