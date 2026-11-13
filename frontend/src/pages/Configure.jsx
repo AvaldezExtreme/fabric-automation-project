@@ -511,7 +511,7 @@ function Configure({ data, onNext, onError }) {
       </div>
 
       <div style={{ marginBottom: '2rem' }}>
-        <h3>🌐 How are the sites connected?</h3>
+        <h3 id="site-interconnect" style={{ scrollMarginTop: '80px' }}>🌐 How are the sites connected?</h3>
         <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>
           This decides which cores get Fabric Extend tunnels, the onboarding gateway and an uplink.
         </p>

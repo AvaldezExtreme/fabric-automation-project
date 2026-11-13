@@ -38,6 +38,9 @@ function App() {
     districtName: ''
   });
   const [error, setError] = useState(null);
+  // Friendly (non-error) note, e.g. after an older project was sent back
+  // to Configure to pick up options added since it was saved
+  const [notice, setNotice] = useState(null);
   // True while a step page has an unsaved inline edit open (e.g. Review's
   // edit mode) - used to warn before navigating away
   const [editingInProgress, setEditingInProgress] = useState(false);
@@ -180,7 +183,7 @@ function App() {
     const project = {
       faceProject: true,
       projectVersion: 1,
-      appVersion: 'v2.14.1 (V2611056)',
+      appVersion: 'v2.14.2 (V2611057)',
       savedAt: new Date().toISOString(),
       currentStep,
       data
@@ -214,7 +217,15 @@ function App() {
           return;
         }
         setData(project.data);
-        setCurrentStep(Math.min(Math.max(project.currentStep || 0, 0), steps.length - 1));
+        const savedStep = Math.min(Math.max(project.currentStep || 0, 0), steps.length - 1);
+        // Saved before v2.14 (no interconnect choice yet) and past Configure:
+        // send it back once so the onboarding gateway / uplinks get applied -
+        // otherwise its configs would be generated without them
+        const needsConfigure = savedStep > 1 && !(project.data.settings || {}).siteInterconnect;
+        setCurrentStep(needsConfigure ? 1 : savedStep);
+        setNotice(needsConfigure
+          ? 'This project was saved with an earlier version of FACE, so we brought you back to Configure Settings. Two new sections were added: "How are the sites connected?" and "Onboarding gateway & uplinks". Check them, then click Continue to Review. Your switches, serials and settings are unchanged.'
+          : null);
         setError(null);
       } catch (err) {
         setError(`Could not open project: ${err.message}`);
@@ -238,6 +249,7 @@ function App() {
   const handleStepNext = (newData) => {
     setData(newData);
     setError(null);
+    setNotice(null);
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     }
@@ -253,6 +265,7 @@ function App() {
 
   const handleReset = () => {
     setCurrentStep(0);
+    setNotice(null);
     setData({
       file: null,
       vlanCount: 0,
@@ -444,6 +457,19 @@ function App() {
         {/* Content Area */}
         <main className="app-content">
           {/* Error Banner */}
+          {notice && (
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', justifyContent: 'space-between', padding: '12px 16px', marginBottom: '16px', borderRadius: '8px', border: '1px solid #7519F9', borderLeft: '4px solid #7519F9', background: 'rgba(117,25,249,0.08)', color: 'var(--text-primary)', fontSize: '0.9rem' }}>
+              <div>
+                <span style={{ marginRight: '8px' }}>ℹ️</span>{notice}{' '}
+                <button onClick={() => document.getElementById('site-interconnect')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  style={{ border: 'none', background: 'none', color: 'var(--extreme-violet, #7519F9)', fontWeight: 700, cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
+                  Show me
+                </button>
+              </div>
+              <button onClick={() => setNotice(null)} aria-label="Dismiss" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-secondary)', fontSize: '1rem' }}>✕</button>
+            </div>
+          )}
+
           {error && (
             <div className="error-banner">
               <div className="error-content">
@@ -500,7 +526,7 @@ function App() {
       {/* Footer */}
       <footer className="app-footer">
         <div className="footer-content">
-          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.14.1 (V2611056)</p>
+          <p>© 2026 Extreme Networks, Inc. | FACE - Fabric Auto Configuration Engine v2.14.2 (V2611057)</p>
           <div className="footer-links">
             <a href="#">Documentation</a>
             <a href="#">Support</a>
