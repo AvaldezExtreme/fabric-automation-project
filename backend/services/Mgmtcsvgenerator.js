@@ -1,6 +1,8 @@
 // Management CSV Generator
 // Generates mgmt.csv with serial number to management IP mappings
-// No external dependencies - pure string formatting
+// Addressing comes from mgmtAddressing.js - the same numbers the switch
+// configs use, so this file always matches what is loaded on the switch.
+import { mgmtAddressFor } from './mgmtAddressing.js';
 
 export const generateMgmtCsv = (switches, serials) => {
   // serials format: array of { serialNumber, siteId, switchName, switchType, ... }
@@ -32,25 +34,20 @@ export const generateMgmtCsv = (switches, serials) => {
       }
       
       if (switchData) {
-        // Get management VLAN and related info
-        const mgmtVlan = switchData.mgmtVlan || 16;
+        // Management VLAN, IP, mask and gateway - identical to the switch
+        // config (L2: subnet's first three octets + per-site number; L3: its
+        // own SVI address on the mgmt VLAN). Without a mgmt subnet, fall back
+        // to the legacy 10.<site>.<VLAN> scheme only where it forms an address.
+        // L3 switches without an SVI on the mgmt VLAN (routed closets) are
+        // listed with their CLIP /32 and no gateway.
+        const addr = mgmtAddressFor(switchData);
         const siteId = switchData.siteId;
-        const octet = switchData.mgmtIpOctet;
-        
-        // Find the management VLAN subnet from VLANs
-        const mgmtVlanData = switchData.vlans.find(v => v.vlanId === parseInt(mgmtVlan));
-        let subnet = '255.255.255.0'; // default
-        
-        if (mgmtVlanData && mgmtVlanData.subnet) {
-          subnet = cidrToSubnet(mgmtVlanData.subnet);
-        }
-        
-        // Calculate IPs
-        const mgmtIp = `10.${siteId}.${mgmtVlan}.${octet}`;
-        const mgmtGateway = `10.${siteId}.${mgmtVlan}.1`;
-        
-        // Get I-SID for management VLAN
-        const mgmtIsid = mgmtVlanData ? mgmtVlanData.isid : `12${siteId}${mgmtVlan.toString().padStart(4, '0')}`;
+        const mgmtVlan = addr.viaClip ? '' : addr.vlanId;
+        const legacy = !addr.ip && addr.vlanId <= 255 ? `10.${siteId}.${addr.vlanId}` : null;
+        const subnet = addr.mask;
+        const mgmtIp = addr.ip || (legacy ? `${legacy}.${addr.octet}` : '');
+        const mgmtGateway = addr.ip ? (addr.gateway || '') : (legacy ? `${legacy}.1` : '');
+        const mgmtIsid = addr.viaClip ? '' : (addr.isid || `12${siteId}${addr.vlanId.toString().padStart(4, '0')}`);
         
         // Site name as a Site Engine path - same /World/<Location> convention
         // as the Site Engine CSV (spaces kept; csv quoting handles them)
@@ -100,45 +97,4 @@ const escapeCSV = (value) => {
   }
   
   return stringValue;
-};
-
-// Helper: Convert CIDR notation subnet to dot notation
-const cidrToSubnet = (cidrNotation) => {
-  if (!cidrNotation) return '255.255.255.0';
-  
-  // Handle "10.0.0.0/24" format
-  const parts = cidrNotation.split('/');
-  if (parts.length === 2) {
-    const cidr = parseInt(parts[1]);
-    return cidrToDottedDecimal(cidr);
-  }
-  
-  // If it's already in dot notation, return it
-  if (cidrNotation.includes('.')) {
-    return cidrNotation;
-  }
-  
-  return '255.255.255.0'; // default
-};
-
-// Helper: Convert CIDR to dotted decimal notation
-const cidrToDottedDecimal = (cidr) => {
-  const masks = {
-    8: '255.0.0.0',
-    16: '255.255.0.0',
-    23: '255.255.254.0',
-    24: '255.255.255.0',
-    22: '255.255.252.0',
-    21: '255.255.248.0',
-    25: '255.255.255.128',
-    26: '255.255.255.192',
-    27: '255.255.255.224',
-    28: '255.255.255.240',
-    29: '255.255.255.248',
-    30: '255.255.255.252',
-    31: '255.255.255.254',
-    32: '255.255.255.255'
-  };
-  
-  return masks[cidr] || '255.255.255.0';
 };

@@ -1,3 +1,5 @@
+import { mgmtAddressFor } from './mgmtAddressing.js';
+
 // Management access policy (Claudio, 2026-11-05): SSH only - no Telnet;
 // web management HTTPS only - never HTTP. FE 9.4 CmdRef p.395 (sshd flag),
 // p.396 (telnetd flag), p.685 (ssh), p.750 (web-server), p.753 (secure-only).
@@ -381,29 +383,14 @@ ${bannerBlock(switchData, settings)}
   const l2Vlans = vlansToConfig.filter(v => !(skipSsid && isSsid(v)));
   const ssidSkipped = vlansToConfig.filter(v => skipSsid && isSsid(v));
   
-  // Find the VLAN object for the management VLAN
-  const mgmtVlan = vlansToConfig.find(v => v.vlanId === mgmtVlanId);
-  
-  let mgmtIp = '10.0.0.1';
-  let mgmtGateway = null;
-  let mgmtPrefix = '24';
-  
-  if (mgmtVlan && mgmtVlan.subnet) {
-    const [network, cidr] = mgmtVlan.subnet.split('/');
-    if (network && cidr) {
-      const octets = network.split('.');
-      const lastOctet = switchData.mgmtIpOctet ? parseInt(switchData.mgmtIpOctet) : 1;
-      console.log(`DEBUG L2 ${switchData.name}: MgmtVLAN=${mgmtVlanId}, mgmtIpOctet="${switchData.mgmtIpOctet}", final IP="${octets[0]}.${octets[1]}.${octets[2]}.${lastOctet}"`);
-      mgmtIp = `${octets[0]}.${octets[1]}.${octets[2]}.${lastOctet}`;
-      // Next hop = the mgmt VLAN's gateway on the L3 core, built the same
-      // way the L3 SVI is (first three octets + .1)
-      mgmtGateway = `${octets[0]}.${octets[1]}.${octets[2]}.1`;
-      mgmtPrefix = cidr;
-    }
-  } else {
-    // If no subnet found, use default
-    console.log(`DEBUG L2 ${switchData.name}: Using default mgmt config for VLAN ${mgmtVlanId}`);
-  }
+  // Mgmt IP / prefix / gateway - shared with mgmt.csv, the Site Engine CSV
+  // and the validator (mgmtAddressing.js) so they always agree. Gateway =
+  // the mgmt VLAN's SVI on the L3 core (first three octets + .1).
+  const addr = mgmtAddressFor({ ...switchData, mgmtVlan: mgmtVlanId });
+  const mgmtIp = addr.ip || '10.0.0.1';
+  const mgmtGateway = addr.gateway;
+  const mgmtPrefix = addr.prefix;
+  if (!addr.ip) console.log(`DEBUG L2 ${switchData.name}: Using default mgmt config for VLAN ${mgmtVlanId}`);
   
   // Create VLANs
   config += '! Create VLANs\n';

@@ -1,4 +1,5 @@
 import { stringify } from 'csv-stringify/sync';
+import { mgmtAddressFor } from './mgmtAddressing.js';
 
 export const generateSiteEngineCsv = (switches, serialMap = {}, skippedSerials = false) => {
   const records = [];
@@ -18,22 +19,12 @@ export const generateSiteEngineCsv = (switches, serialMap = {}, skippedSerials =
       serialNumber = `TBD-${sw.name}`;
     }
     
-    // Calculate mgmt IP based on switch type
-    let mgmtClip;
-    if (sw.type === 'L3') {
-      // L3: SiteID.1.1.1/32
-      mgmtClip = `${sw.siteId}.1.1.1`;
-    } else {
-      // L2: Use management VLAN subnet
-      const mgmtVlan = sw.vlans.find(v => v.vlanName.toLowerCase().includes('netmgmt'));
-      if (mgmtVlan && mgmtVlan.subnet) {
-        const octets = mgmtVlan.subnet.split('/')[0].split('.');
-        const lastOctet = parseInt(octets[3]) + parseInt(sw.name.match(/\d+$/) || 1);
-        mgmtClip = `${octets[0]}.${octets[1]}.${octets[2]}.${lastOctet}`;
-      } else {
-        mgmtClip = '10.0.0.1';
-      }
-    }
+    // Mgmt address exactly as the switch config has it (mgmtAddressing.js):
+    // L3 = its CLIP (loopback or SiteID.1.1.1); L2 = mgmt VLAN subnet + the
+    // switch's per-site number. (It used the switch-name suffix before, so
+    // every new closet restarted at .1 and collided.)
+    const addr = mgmtAddressFor(sw);
+    const mgmtClip = sw.type === 'L3' ? addr.clip : (addr.ip || '10.0.0.1');
     
     // Determine topology role
     const topologyRole = sw.type === 'L3' ? 'L3' : 'L2_ACCESS';

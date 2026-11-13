@@ -7,6 +7,8 @@
 // fabric, not a conflict.
 // ============================================
 
+import { mgmtAddressFor } from './mgmtAddressing.js';
+
 export const validateFabricConfiguration = (switches, settings = {}) => {
   const results = {
     passed: true,
@@ -545,40 +547,55 @@ const runDHCPChecks = (switches, settings, results) => {
 // INTERFACE VALIDATION
 // ============================================
 
+// Management addressing exactly as the configs and CSVs build it
+// (mgmtAddressing.js). Before V2611132 this read sw.mgmtIp, a field that
+// never existed, so it always passed without checking anything.
 const runInterfaceChecks = (switches, results) => {
-  const interfaceIPs = new Map();
-  const ipConflicts = [];
+  const problems = [];
+  const byIp = new Map();
+  const clips = new Map();
 
   switches.forEach((sw) => {
-    if (sw.mgmtIp) {
-      if (interfaceIPs.has(sw.mgmtIp)) {
-        ipConflicts.push({
-          ip: sw.mgmtIp,
-          switches: [interfaceIPs.get(sw.mgmtIp), sw.name]
-        });
-      } else {
-        interfaceIPs.set(sw.mgmtIp, sw.name);
-      }
+    const a = mgmtAddressFor(sw);
+    if (sw.type === 'L3') {
+      if (clips.has(a.clip)) problems.push(`CLIP ${a.clip} is used by both ${clips.get(a.clip)} and ${sw.name}`);
+      else clips.set(a.clip, sw.name);
+      return;
     }
+    if (!a.subnet) {
+      problems.push(`${sw.name}: mgmt VLAN ${a.vlanId} has no subnet in this site - the switch gets a placeholder mgmt IP`);
+      return;
+    }
+    if (!a.valid) {
+      problems.push(`${sw.name}: mgmt IP ${a.ip} is not a valid address`);
+      return;
+    }
+    const hostMax = Math.min(254, Math.pow(2, Math.max(0, 32 - parseInt(a.prefix))) - 2);
+    if (parseInt(a.prefix) >= 24 && a.octet > hostMax) {
+      problems.push(`${sw.name}: mgmt IP ${a.ip} falls outside ${a.subnet} - more switches than the mgmt subnet holds`);
+    }
+    if (a.ip === a.gateway) {
+      problems.push(`${sw.name}: mgmt IP ${a.ip} is the mgmt gateway (the L3 core's address on VLAN ${a.vlanId})`);
+    }
+    if (byIp.has(a.ip)) problems.push(`mgmt IP ${a.ip} is used by both ${byIp.get(a.ip)} and ${sw.name}`);
+    else byIp.set(a.ip, sw.name);
   });
 
-  if (ipConflicts.length > 0) {
+  if (problems.length > 0) {
     results.checks.push({
       type: 'error',
       category: 'Interface Configuration',
-      check: 'IP Address Conflicts',
-      message: `Found ${ipConflicts.length} duplicate management IP address(es)`,
-      details: ipConflicts,
+      check: 'Management IP Addresses',
+      message: `Found ${problems.length} management addressing problem(s): ${problems.join('; ').substring(0, 400)}`,
+      details: problems,
       severity: 'critical'
     });
   } else {
     results.checks.push({
       type: 'pass',
       category: 'Interface Configuration',
-      check: 'IP Address Conflicts',
-      message: interfaceIPs.size > 0
-        ? `All ${interfaceIPs.size} management IP addresses are unique`
-        : 'No management IP conflicts detected',
+      check: 'Management IP Addresses',
+      message: `All ${byIp.size} L2 management IPs are unique, valid and inside their mgmt subnet; ${clips.size} L3 CLIP(s) unique`,
       severity: 'info'
     });
   }
